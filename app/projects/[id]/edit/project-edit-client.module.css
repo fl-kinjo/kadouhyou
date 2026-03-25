@@ -1,0 +1,165 @@
+.page {
+  padding: 24px;
+  max-width: 980px;
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.pageTitle {
+  margin: 0;
+}
+
+.card {
+  margin-top: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fff;
+}
+
+.gridRow {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.gridLabel {
+  font-weight: 700;
+}
+
+.hr {
+  border: 0;
+  border-top: 1px solid #eee;
+  margin: 14px 0;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  box-sizing: border-box;
+}
+
+.inputSmall {
+  width: 220px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  box-sizing: border-box;
+}
+
+.select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.inlineRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.directorWrap {
+  display: grid;
+  gap: 10px;
+}
+
+.directorRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.percentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.buttonRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.btnPrimary {
+  padding: 12px 52px;
+  border-radius: 999px;
+  border: none;
+  background: #b00;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btnGhost {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #bbb;
+  background: #fff;
+  cursor: pointer;
+}
+
+.btnMini {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #bbb;
+  background: #fff;
+  cursor: pointer;
+}
+
+.btnLink {
+  width: fit-content;
+  border: none;
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.errorText {
+  margin-top: 12px;
+  color: #b00;
+  text-align: center;
+}
+
+.subErrorText {
+  margin-top: 6px;
+  color: #b00;
+}
+
+.emptyText {
+  color: #666;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 16px;
+  }
+
+  .pageHeader {
+    flex-wrap: wrap;
+  }
+
+  .gridRow {
+    grid-template-columns: 1fr;
+  }
+
+  .inputSmall {
+    width: 100%;
+    max-width: 220px;
+  }
+}

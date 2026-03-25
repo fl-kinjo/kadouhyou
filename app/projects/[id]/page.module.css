@@ -1,0 +1,132 @@
+.page {
+  padding: 24px;
+  max-width: 1920px;
+}
+
+.pageTitle {
+  margin: 0;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.headerActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.backLink {
+  text-decoration: underline;
+  color: #111;
+}
+
+.card {
+  margin-top: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.rowValue {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.link {
+  text-decoration: underline;
+  color: inherit;
+}
+
+.revenueSection {
+  margin-top: 18px;
+}
+
+.revenueTitle {
+  margin-bottom: 8px;
+}
+
+.errorText {
+  color: #b00;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.revenueTable {
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.thLeft {
+  border-bottom: 1px solid #ccc;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.thMonth {
+  border-bottom: 1px solid #ccc;
+  padding: 10px 12px;
+  text-align: center;
+  white-space: nowrap;
+  background: #6f6f77;
+  color: #fff;
+  font-weight: 700;
+}
+
+.tdLabel {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 10px 12px;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.tdLabelStrong {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 10px 12px;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.tdName {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 10px 12px;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.tdMoney {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 10px 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tdMoneyStrong {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 10px 12px;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+@media (max-width: 768px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}

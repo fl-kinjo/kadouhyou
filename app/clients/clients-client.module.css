@@ -1,0 +1,240 @@
+.page {
+  padding: 24px;
+  max-width: 1200px;
+}
+
+.pageTitle {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.toolbarLeft {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.searchWrap {
+  display: flex;
+  align-items: center;
+}
+
+.searchInput {
+  width: 520px;
+  max-width: 70vw;
+  padding: 10px 12px;
+  border: 1px solid #bbb;
+  border-radius: 8px 0 0 8px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.searchBtn {
+  padding: 10px 14px;
+  border: 1px solid #bbb;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  background: #eee;
+  cursor: pointer;
+}
+
+.chkLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chkText {
+  font-weight: 800;
+}
+
+.btnRed {
+  border: none;
+  background: #b00;
+  color: #fff;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.topBorder {
+  border-top: 1px solid #eee;
+  margin-top: 14px;
+}
+
+.tableWrap {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 860px;
+}
+
+.thLeft {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #e0e0e0;
+  font-weight: 900;
+}
+
+.thCenter {
+  text-align: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #e0e0e0;
+  font-weight: 900;
+  width: 90px;
+}
+
+.thSub {
+  padding: 0;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.thYear {
+  text-align: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  font-weight: 900;
+}
+
+.td {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.tdName {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+}
+
+.tdCenter {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+  text-align: center;
+  width: 90px;
+}
+
+.tdMoney {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.errorText {
+  margin-top: 12px;
+  color: #b00;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.modalCard {
+  width: min(900px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #ddd;
+  position: relative;
+  min-height: 320px;
+  box-sizing: border-box;
+}
+
+.btnX {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 22px;
+}
+
+.modalTitle {
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+.modalForm {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.formLabel {
+  font-weight: 800;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  box-sizing: border-box;
+}
+
+.modalButtonRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.btnRedBig {
+  border: none;
+  background: #b00;
+  color: #fff;
+  border-radius: 999px;
+  padding: 12px 64px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.modalErrorText {
+  margin-top: 14px;
+  color: #b00;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .formRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .searchInput {
+    width: min(320px, 70vw);
+  }
+}

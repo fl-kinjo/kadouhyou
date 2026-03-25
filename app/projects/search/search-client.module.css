@@ -1,0 +1,303 @@
+.page {
+  padding: 24px;
+  max-width: 1200px;
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  margin: 0;
+}
+
+.headerLinks {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.backLink {
+  text-decoration: underline;
+  color: #111;
+}
+
+.topBorder {
+  border-top: 1px solid #eee;
+  margin-top: 10px;
+  padding-top: 16px;
+}
+
+.formCard {
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.grid {
+  display: grid;
+  gap: 18px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.label {
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.textInput {
+  width: min(760px, 100%);
+  padding: 12px 12px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.pickerBtn {
+  width: min(360px, 100%);
+  padding: 12px 12px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.chevron {
+  opacity: 0.55;
+}
+
+.inlineRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dateInput {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.moneyInput {
+  width: 200px;
+  padding: 12px 12px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.pctInput {
+  width: 64px;
+  padding: 10px 10px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.statusWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.statusItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusText {
+  font-weight: 700;
+}
+
+.buttonRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.btnClear {
+  border: 2px solid #bbb;
+  background: #fff;
+  border-radius: 999px;
+  padding: 12px 22px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.btnSearch {
+  border: none;
+  background: #b00;
+  color: #fff;
+  border-radius: 999px;
+  padding: 12px 46px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.message {
+  margin-top: 12px;
+  color: #b00;
+  font-weight: 800;
+}
+
+.resultCount {
+  margin-top: 18px;
+  font-weight: 900;
+}
+
+.tableWrap {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 1320px;
+  border-collapse: collapse;
+  border: 1px solid #e5e5e5;
+}
+
+.thBase {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.thNo {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: center;
+  width: 64px;
+}
+
+.thLeft {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: left;
+}
+
+.thCenter {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: center;
+}
+
+.thRight {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: right;
+}
+
+.tdBase {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.tdNo {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: center;
+}
+
+.tdLeft {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: left;
+}
+
+.tdCenter {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: center;
+}
+
+.tdRight {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  text-align: right;
+}
+
+.tdEmpty {
+  padding: 16px;
+  color: #666;
+  text-align: center;
+}
+
+.projectLink {
+  text-decoration: underline;
+  color: inherit;
+}
+
+.projectNo {
+  margin-left: 10px;
+  color: #777;
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 16px;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .buttonRow {
+    justify-content: flex-start;
+  }
+}

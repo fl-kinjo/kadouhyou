@@ -1,0 +1,289 @@
+.page {
+  padding: 24px;
+}
+
+.pageTitle {
+  margin: 0;
+}
+
+.topBorder {
+  border-top: 1px solid #eee;
+  margin-top: 10px;
+  padding-top: 16px;
+}
+
+.tabRow {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.tabLink {
+  font-weight: 900;
+  color: #111;
+  text-decoration: none;
+  padding: 10px 12px;
+}
+
+.sectionBorder {
+  border-top: 1px solid #eee;
+  margin-top: 12px;
+  padding-top: 14px;
+}
+
+.alertSection {
+  margin-top: 6px;
+}
+
+.detailsBox {
+  border: 1px solid #f1c7cf;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.summaryRow {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summaryInner {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.summaryAlert {
+  color: #b00;
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.summaryDate {
+  color: #b00;
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.detailsBody {
+  padding: 10px 12px;
+}
+
+.emptySubText {
+  color: #666;
+}
+
+.allListSection {
+  margin-top: 18px;
+}
+
+.mainListWrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  width: 100%;
+}
+
+.leftScrollArea {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid #e5e5e5;
+  background: #fff;
+}
+
+.rightFixedArea {
+  flex: 0 0 auto;
+  width: 360px;
+}
+
+.tableMain {
+  width: 100%;
+  min-width: 1240px;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.thBase {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+}
+
+.thNo {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: center;
+  width: 64px;
+}
+
+.thLeft {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.thCenter {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.thRight {
+  padding: 12px 10px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+  font-weight: 900;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: right;
+}
+
+.tdBase {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+}
+
+.tdNo {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: center;
+  color: #111;
+}
+
+.tdLeft {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.tdCenter {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.tdRight {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-size: 13px;
+  height: 48px;
+  box-sizing: border-box;
+  text-align: right;
+}
+
+.tdEmpty {
+  padding: 16px;
+  color: #666;
+  text-align: center;
+}
+
+.projectLink {
+  text-decoration: underline;
+  color: inherit;
+}
+
+.alertRow {
+  background: #fdecef;
+}
+
+.sideHeaderRow {
+  display: grid;
+  grid-template-columns: 120px 120px 120px;
+  gap: 0;
+}
+
+.sideHeaderCell {
+  padding: 12px 10px;
+  font-weight: 900;
+  font-size: 13px;
+  white-space: nowrap;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.sideRow {
+  display: grid;
+  grid-template-columns: 120px 120px 120px;
+  gap: 0;
+}
+
+.sideCell {
+  padding: 14px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1200px) {
+  .mainListWrap {
+    gap: 12px;
+  }
+
+  .rightFixedArea {
+    width: 360px;
+  }
+}
+
+@media (max-width: 900px) {
+  .page {
+    padding: 16px;
+  }
+
+  .tabRow {
+    flex-wrap: wrap;
+  }
+}

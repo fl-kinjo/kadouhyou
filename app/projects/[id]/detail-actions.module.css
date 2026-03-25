@@ -1,0 +1,30 @@
+.wrap {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btnEdit {
+  display: inline-block;
+  text-decoration: none;
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 16px;
+  color: #111;
+}
+
+.btnDelete {
+  border: none;
+  background: #b00;
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.errorText {
+  color: #b00;
+  font-size: 13px;
+}
