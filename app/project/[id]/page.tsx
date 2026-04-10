@@ -14,7 +14,7 @@ type Profile = {
   id: string;
   last_name: string | null;
   first_name: string | null;
-  status?: number | null;
+  status: number | null;
 };
 
 type ProjectPlannedCost = {
