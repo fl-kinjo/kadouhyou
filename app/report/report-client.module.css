@@ -1,0 +1,282 @@
+.page {
+  padding: 24px;
+  max-width: 1100px;
+}
+
+.pageTitle {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.topBorder {
+  border-top: 1px solid #eee;
+  margin-top: 10px;
+  padding-top: 16px;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dateArea {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dateLabel {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.headerButtons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  margin-top: 22px;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.contentRow {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+  align-items: flex-start;
+}
+
+.tableArea {
+  flex: 1;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 680px;
+}
+
+.th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  font-weight: 800;
+}
+
+.thActions {
+  text-align: right;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  font-weight: 800;
+  width: 180px;
+  position: sticky;
+  right: 0;
+  background: #fff;
+}
+
+.td {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+}
+
+.tdNo {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  font-weight: 800;
+  width: 70px;
+}
+
+.tdTime {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  text-align: left;
+  width: 120px;
+}
+
+.tdActions {
+  padding: 12px 12px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  text-align: right;
+  position: sticky;
+  right: 0;
+  background: #fff;
+  width: 180px;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.footerRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.totalHours {
+  font-weight: 800;
+}
+
+.btnArrow {
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.dateInput {
+  border: 1px solid #bbb;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.btnRed {
+  border: none;
+  background: #b00;
+  color: #fff;
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.btnSmall {
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.errorText {
+  margin-top: 10px;
+  color: #b00;
+}
+
+.helpText {
+  margin-top: 10px;
+  color: #666;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.modalCard {
+  width: min(720px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  border: 1px solid #ddd;
+  box-sizing: border-box;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modalTitle {
+  margin: 0;
+}
+
+.btnX {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.modalForm {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.formLabel {
+  font-weight: 700;
+  padding-top: 10px;
+}
+
+.select,
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #bbb;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.timeInputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inputSmall {
+  width: 90px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #bbb;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.formHelpText {
+  margin: 6px 0 0;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.modalButtonRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.modalErrorText {
+  margin: 0;
+  color: #b00;
+  text-align: center;
+}

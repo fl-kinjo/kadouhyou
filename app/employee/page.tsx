@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/app/utils/supabase/server";
-import SummaryClient from "./summary-client";
+import EmployeeClient from "./employee-client";
 
-export default async function SummaryPage() {
+export default async function EmployeePage() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
 
@@ -10,5 +10,5 @@ export default async function SummaryPage() {
     redirect("/login");
   }
 
-  return <SummaryClient />;
+  return <EmployeeClient />;
 }

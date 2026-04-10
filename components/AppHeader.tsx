@@ -2,13 +2,31 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/app/utils/supabase/client";
 
 export default function AppHeader() {
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+
+  if (pathname === "/login") {
+    return null;
+  }
+
+  const logout = async () => {
+    setLoggingOut(true);
+    await supabase.auth.signOut();
+    setOpen(false);
+    router.replace("/login");
+    router.refresh();
+    setLoggingOut(false);
+  };
 
   return (
     <>
-      {/* ===== ヘッダー ===== */}
       <header style={header}>
         <button onClick={() => setOpen(true)} style={hamburger}>
           ☰
@@ -17,10 +35,8 @@ export default function AppHeader() {
         <div style={{ fontWeight: 900 }}>KINTSURU</div>
       </header>
 
-      {/* ===== オーバーレイ ===== */}
       {open && <div style={overlay} onClick={() => setOpen(false)} />}
 
-      {/* ===== サイドメニュー ===== */}
       <aside
         style={{
           ...drawer,
@@ -30,31 +46,31 @@ export default function AppHeader() {
         <div style={{ marginBottom: 20, fontWeight: 900 }}>メニュー</div>
 
         <nav style={{ display: "grid", gap: 14 }}>
-          <MenuLink href="/projects" label="案件進捗管理" />
-          <MenuLink href="/projects/search" label="案件検索" />
-          <MenuLink href="/reports" label="業務報告" />
-          <MenuLink href="/summary" label="サマリー" />
-          <MenuLink href="/clients" label="クライアント管理" />
-          <MenuLink href="/partners" label="パートナー管理" />
-          <MenuLink href="/teams" label="組織登録" />
-          <MenuLink href="/employees" label="社員登録" />
-          <MenuLink href="/job-roles" label="職種登録" />
-          <MenuLink href="/settings" label="設定" />
+          <MenuLink href="/project" label="案件管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/report" label="業務報告" onClick={() => setOpen(false)} />
+          <MenuLink href="/summary" label="サマリー" onClick={() => setOpen(false)} />
+          <MenuLink href="/client" label="クライアント管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/partner" label="パートナー管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/team" label="組織管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/employee" label="社員管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/job" label="職種管理" onClick={() => setOpen(false)} />
+
+          <button type="button" onClick={logout} style={logoutButton} disabled={loggingOut}>
+            {loggingOut ? "ログアウト中..." : "ログアウト"}
+          </button>
         </nav>
       </aside>
     </>
   );
 }
 
-function MenuLink({ href, label }: { href: string; label: string }) {
+function MenuLink({ href, label, onClick }: { href: string; label: string; onClick?: () => void }) {
   return (
-    <Link href={href} style={link}>
+    <Link href={href} style={link} onClick={onClick}>
       {label}
     </Link>
   );
 }
-
-/* ===== style ===== */
 
 const header: React.CSSProperties = {
   height: 56,
@@ -100,4 +116,15 @@ const link: React.CSSProperties = {
   textDecoration: "none",
   color: "#000",
   fontWeight: 700,
+};
+
+const logoutButton: React.CSSProperties = {
+  textAlign: "left",
+  border: "none",
+  background: "transparent",
+  color: "#000",
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: 0,
+  fontSize: "inherit",
 };

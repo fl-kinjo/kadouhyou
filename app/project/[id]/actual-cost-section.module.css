@@ -1,0 +1,335 @@
+.section {
+  margin-top: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #ddd;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.headerButtons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.addButton,
+.confirmButton {
+  min-width: 240px;
+  height: 48px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.addButton {
+  border: 1px solid #d70000;
+  background: #fff;
+  color: #d70000;
+}
+
+.confirmButton {
+  border: none;
+  background: #d70000;
+  color: #fff;
+}
+
+.confirmButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.errorText {
+  margin: 12px 0 0;
+  color: #b00020;
+}
+
+.tableWrap {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #bfbfbf;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.th,
+.thMonth,
+.thTotal,
+.thAction {
+  padding: 14px 16px;
+  border-bottom: 1px solid #bfbfbf;
+  background: #d9d9d9;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.thMonth {
+  text-align: center;
+}
+
+.thTotal {
+  background: #9a9a9a;
+  text-align: center;
+}
+
+.thAction {
+  width: 150px;
+  background: #fff;
+  border-left: 1px solid #d3d3d3;
+}
+
+.emptyCell {
+  padding: 18px 16px;
+  text-align: center;
+  background: #fff;
+}
+
+.tdType,
+.tdMain,
+.tdOwner,
+.tdMonth,
+.tdTotal,
+.tdActions,
+.totalLabel,
+.totalValue,
+.totalValueStrong,
+.totalBlank {
+  padding: 14px 16px;
+  border-bottom: 1px solid #d3d3d3;
+  background: #fff;
+  vertical-align: middle;
+}
+
+.tdType {
+  width: 88px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tdMain,
+.tdOwner {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.tdMonth,
+.totalValue,
+.totalValueStrong {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tdTotal,
+.totalValueStrong {
+  background: #b0b0b0;
+  font-weight: 800;
+}
+
+.tdActions {
+  background: #fff;
+  border-left: 1px solid #d3d3d3;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.smallButton,
+.removeLineButton {
+  min-width: 66px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid #bcbcbc;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.totalRow .totalLabel,
+.totalRow .totalValue,
+.totalRow .totalBlank {
+  background: #d9d9d9;
+}
+
+.totalLabel {
+  font-weight: 800;
+}
+
+.totalBlank {
+  border-left: 1px solid #d3d3d3;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+}
+
+.modalCard {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: 28px 32px 32px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+}
+
+.modalHeader {
+  position: relative;
+  margin-bottom: 26px;
+}
+
+.closeButton {
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  border: none;
+  background: transparent;
+  font-size: 48px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modalTitle {
+  margin: 0;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.modalBody {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.formLabel {
+  text-align: right;
+  font-weight: 700;
+}
+
+.select,
+.input,
+.inputSmall,
+.inputMedium {
+  height: 40px;
+  border: 1px solid #c6c6c6;
+  background: #fff;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.select,
+.input {
+  width: 100%;
+}
+
+.inputSmall {
+  width: 84px;
+}
+
+.inputMedium {
+  width: 128px;
+}
+
+.divider {
+  border-top: 1px solid #d7d7d7;
+  margin: 18px 0 16px;
+}
+
+.entryBlock {
+  display: grid;
+  gap: 10px;
+}
+
+.entryRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.inlineLabel,
+.slash {
+  font-weight: 700;
+}
+
+.addMonthLink {
+  margin-top: 12px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-decoration: underline;
+  font-weight: 700;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.submitRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.submitButton {
+  min-width: 170px;
+  height: 46px;
+  border-radius: 999px;
+  border: none;
+  background: #d70000;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 900px) {
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .formLabel {
+    text-align: left;
+  }
+
+  .modalCard {
+    padding: 24px 20px 24px;
+  }
+}

@@ -1,0 +1,198 @@
+.page {
+  padding: 24px;
+  max-width: 1600px;
+}
+
+.topRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  margin: 0;
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.selectorWrap {
+  display: grid;
+  gap: 6px;
+}
+
+.controlLabel {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.select {
+  min-width: 320px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #bbb;
+  background: #fff;
+  font-size: 14px;
+}
+
+.yearNav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.yearButton {
+  border: none;
+  background: transparent;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.yearLabel {
+  font-size: 18px;
+  font-weight: 900;
+  min-width: 80px;
+  text-align: center;
+}
+
+.topBorder {
+  border-top: 1px solid #eee;
+  margin-top: 16px;
+  padding-top: 18px;
+}
+
+.errorText {
+  margin: 0 0 12px;
+  color: #b00;
+  font-weight: 700;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.sectionSubTitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.noteArea {
+  margin-bottom: 12px;
+  color: #b00;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.tableFrame {
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1180px;
+}
+
+.thFixed,
+.thMonth,
+.thTotal {
+  background: #efefef;
+  border-bottom: 1px solid #d8d8d8;
+  padding: 12px 10px;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.thFixed {
+  width: 120px;
+  min-width: 120px;
+  text-align: left;
+}
+
+.thMonth {
+  width: 82px;
+  min-width: 82px;
+  text-align: center;
+}
+
+.thTotal {
+  width: 100px;
+  min-width: 100px;
+  text-align: center;
+}
+
+.tdFixed,
+.tdMonth,
+.tdTotal {
+  border-bottom: 1px solid #eee;
+  padding: 16px 10px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.tdFixed {
+  font-weight: 700;
+}
+
+.tdMonth,
+.tdTotal {
+  text-align: center;
+}
+
+.subSection {
+  margin-top: 28px;
+}
+
+.subSectionTitle {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.emptyCell {
+  padding: 16px 10px;
+}
+
+@media (max-width: 720px) {
+  .select {
+    min-width: 220px;
+    width: 100%;
+  }
+
+  .controls {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .noteArea {
+    text-align: left;
+  }
+}

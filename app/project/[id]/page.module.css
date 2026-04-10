@@ -1,0 +1,116 @@
+.page {
+  padding: 24px;
+}
+
+.backRow {
+  display: flex;
+  align-items: center;
+}
+
+.backLink {
+  color: #111;
+  text-decoration: none;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.topBorder {
+  border-top: 1px solid #ddd;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.metaRow {
+  margin-top: 10px;
+  display: flex;
+  gap: 16px;
+  color: #666;
+  flex-wrap: wrap;
+}
+
+.section {
+  margin-top: 24px;
+}
+
+.gridSection {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+}
+
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.infoTable {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.labelCell,
+.valueCell {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid #ddd;
+}
+
+.labelCell {
+  background: #f0f0f0;
+  font-weight: 700;
+}
+
+.valueCell {
+  background: #fff;
+  word-break: break-word;
+}
+
+.infoTable > :nth-last-child(-n + 2) {
+  border-bottom: none;
+}
+
+.docLink {
+  color: #666;
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .infoTable {
+    grid-template-columns: 1fr;
+  }
+
+  .labelCell,
+  .valueCell {
+    min-height: 48px;
+  }
+
+  .infoTable > :nth-last-child(-n + 2) {
+    border-bottom: 1px solid #ddd;
+  }
+
+  .infoTable > :last-child {
+    border-bottom: none;
+  }
+}

@@ -1,0 +1,139 @@
+.page {
+  padding: 24px;
+  max-width: 1600px;
+}
+
+.pageTitle {
+  margin: 0;
+}
+
+.loadingText {
+  margin-top: 16px;
+}
+
+.topBorder {
+  border-top: 1px solid #eee;
+  margin-top: 10px;
+  padding-top: 20px;
+}
+
+.topArea {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.formArea {
+  display: grid;
+  gap: 32px;
+}
+
+.buttonArea {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 24px;
+  align-items: center;
+  max-width: 560px;
+}
+
+.formRowTop {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 24px;
+  align-items: start;
+  max-width: 560px;
+}
+
+.label {
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.input {
+  width: 260px;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid #bbb;
+  font-size: 16px;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.radioArea {
+  display: grid;
+  gap: 18px;
+}
+
+.radioRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 18px;
+}
+
+.radioText {
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.priceInputRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 4px;
+}
+
+.yenMark {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.priceInput {
+  width: 260px;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid #bbb;
+  font-size: 16px;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.btnUpdate {
+  border: none;
+  background: #d70000;
+  color: #fff;
+  border-radius: 999px;
+  padding: 14px 56px;
+  font-weight: 900;
+  font-size: 16px;
+  cursor: pointer;
+  min-width: 220px;
+}
+
+.btnDelete {
+  border: 1px solid #d70000;
+  background: #fff;
+  color: #d70000;
+  border-radius: 999px;
+  padding: 14px 56px;
+  font-weight: 900;
+  font-size: 16px;
+  cursor: pointer;
+  min-width: 220px;
+}
+
+.message {
+  margin-top: 14px;
+  color: #b00;
+  font-weight: 700;
+}
+
