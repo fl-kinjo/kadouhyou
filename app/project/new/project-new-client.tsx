@@ -25,6 +25,12 @@ type GoogleDriveFile = {
   url: string;
 };
 
+type DriveFolder = {
+  id: string;
+  name: string;
+  url: string;
+};
+
 type PickerTarget = "estimate" | "invoice";
 
 type GoogleTokenResponse = {
@@ -68,12 +74,16 @@ declare global {
         DocsView: new (viewId?: string) => {
           setIncludeFolders: (value: boolean) => any;
           setSelectFolderEnabled: (value: boolean) => any;
+          setParent: (parentId: string) => any;
         };
-        DocsUploadView: new () => any;
+        DocsUploadView: new () => {
+          setParent: (parentId: string) => any;
+        };
         PickerBuilder: new () => {
           setAppId: (appId: string) => any;
           setOAuthToken: (token: string) => any;
           setDeveloperKey: (key: string) => any;
+          setTitle: (title: string) => any;
           setCallback: (callback: (data: any) => void) => any;
           addView: (view: any) => any;
           build: () => {
@@ -129,6 +139,14 @@ function toNumberOrNull(value: string) {
   return num;
 }
 
+function buildFolderUrl(folderId: string) {
+  return `https://drive.google.com/drive/folders/${folderId}`;
+}
+
+function buildFileUrl(fileId: string) {
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
 export default function ProjectNewClient() {
   const supabase = createClient();
   const router = useRouter();
@@ -157,6 +175,12 @@ export default function ProjectNewClient() {
   const [pickerLoading, setPickerLoading] = useState(false);
   const [pickerReady, setPickerReady] = useState(false);
   const [gisReady, setGisReady] = useState(false);
+
+  const [driveModalOpen, setDriveModalOpen] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<DriveFolder | null>(null);
+  const [parentFolder, setParentFolder] = useState<DriveFolder | null>(null);
+  const [folderNameInput, setFolderNameInput] = useState("");
+  const [driveActionLoading, setDriveActionLoading] = useState(false);
 
   const tokenClientRef = useRef<GoogleTokenClient | null>(null);
   const accessTokenRef = useRef("");
@@ -273,11 +297,11 @@ export default function ProjectNewClient() {
           if (response.error) {
             setMsg(`Google認証に失敗しました: ${response.error}`);
             setPickerLoading(false);
+            setDriveActionLoading(false);
             return;
           }
 
           accessTokenRef.current = response.access_token;
-          openPicker();
         },
       });
 
@@ -347,6 +371,44 @@ export default function ProjectNewClient() {
     return profile.id;
   };
 
+  const ensureGoogleReady = async () => {
+    if (!googleApiKey || !googleClientId || !googleAppId) {
+      throw new Error("Google Drive 連携用の環境変数が不足しています。");
+    }
+
+    if (!pickerReady || !gisReady || !tokenClientRef.current) {
+      throw new Error("Google Picker の初期化がまだ完了していません。ページ再読み込み後に数秒待ってから再度お試しください。");
+    }
+
+    if (accessTokenRef.current) return accessTokenRef.current;
+
+    const token = await new Promise<string>((resolve, reject) => {
+      if (!tokenClientRef.current) {
+        reject(new Error("Google OAuth クライアントの初期化に失敗しました。"));
+        return;
+      }
+
+      tokenClientRef.current = window.google!.accounts!.oauth2!.initTokenClient({
+        client_id: googleClientId,
+        scope: GOOGLE_SCOPE,
+        callback: (response: GoogleTokenResponse) => {
+          if (response.error) {
+            reject(new Error(`Google認証に失敗しました: ${response.error}`));
+            return;
+          }
+          accessTokenRef.current = response.access_token;
+          resolve(response.access_token);
+        },
+      });
+
+      tokenClientRef.current.requestAccessToken({
+        prompt: accessTokenRef.current ? "" : "consent",
+      });
+    });
+
+    return token;
+  };
+
   const handlePickedFile = (file: GoogleDriveFile) => {
     if (pickerTargetRef.current === "estimate") {
       setEstimate(file.url);
@@ -354,25 +416,29 @@ export default function ProjectNewClient() {
       setInvoice(file.url);
     }
     setPickerLoading(false);
+    setDriveActionLoading(false);
+    setDriveModalOpen(false);
   };
 
-  const openPicker = () => {
+  const openUploadPickerToFolder = (folder: DriveFolder) => {
     if (!window.google?.picker || !accessTokenRef.current) {
       setMsg("Google Picker の初期化に失敗しました。");
       setPickerLoading(false);
+      setDriveActionLoading(false);
       return;
     }
 
     const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
       .setIncludeFolders(true)
-      .setSelectFolderEnabled(false);
+      .setParent(folder.id);
 
-    const uploadView = new window.google.picker.DocsUploadView();
+    const uploadView = new window.google.picker.DocsUploadView().setParent(folder.id);
 
     const picker = new window.google.picker.PickerBuilder()
       .setAppId(googleAppId)
       .setOAuthToken(accessTokenRef.current)
       .setDeveloperKey(googleApiKey)
+      .setTitle(`${folder.name} にアップロード / 選択`)
       .addView(docsView)
       .addView(uploadView)
       .setCallback((data: any) => {
@@ -382,6 +448,7 @@ export default function ProjectNewClient() {
           const doc = data[window.google!.picker!.Response.DOCUMENTS]?.[0];
           if (!doc) {
             setPickerLoading(false);
+            setDriveActionLoading(false);
             return;
           }
 
@@ -390,7 +457,7 @@ export default function ProjectNewClient() {
             name: doc[window.google!.picker!.Document.NAME] ?? "",
             url:
               doc[window.google!.picker!.Document.URL] ||
-              `https://drive.google.com/file/d/${doc[window.google!.picker!.Document.ID]}/view`,
+              buildFileUrl(doc[window.google!.picker!.Document.ID]),
           };
 
           handlePickedFile(file);
@@ -399,6 +466,7 @@ export default function ProjectNewClient() {
 
         if (action === window.google!.picker!.Action.CANCEL) {
           setPickerLoading(false);
+          setDriveActionLoading(false);
         }
       })
       .build();
@@ -406,28 +474,126 @@ export default function ProjectNewClient() {
     picker.setVisible(true);
   };
 
-  const openGooglePicker = (target: PickerTarget) => {
+  const openFolderPicker = async (mode: "existing" | "parent") => {
+    setMsg("");
+    setDriveActionLoading(true);
+
+    try {
+      await ensureGoogleReady();
+
+      if (!window.google?.picker || !accessTokenRef.current) {
+        throw new Error("Google Picker の初期化に失敗しました。");
+      }
+
+      const folderView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true);
+
+      const picker = new window.google.picker.PickerBuilder()
+        .setAppId(googleAppId)
+        .setOAuthToken(accessTokenRef.current)
+        .setDeveloperKey(googleApiKey)
+        .setTitle(mode === "existing" ? "既存フォルダを選択" : "親フォルダを選択")
+        .addView(folderView)
+        .setCallback((data: any) => {
+          const action = data[window.google!.picker!.Response.ACTION];
+
+          if (action === window.google!.picker!.Action.PICKED) {
+            const doc = data[window.google!.picker!.Response.DOCUMENTS]?.[0];
+            if (!doc) {
+              setDriveActionLoading(false);
+              return;
+            }
+
+            const folder: DriveFolder = {
+              id: doc[window.google!.picker!.Document.ID],
+              name: doc[window.google!.picker!.Document.NAME] ?? "",
+              url:
+                doc[window.google!.picker!.Document.URL] ||
+                buildFolderUrl(doc[window.google!.picker!.Document.ID]),
+            };
+
+            if (mode === "existing") {
+              setSelectedFolder(folder);
+              setPickerLoading(true);
+              openUploadPickerToFolder(folder);
+            } else {
+              setParentFolder(folder);
+              setDriveActionLoading(false);
+            }
+            return;
+          }
+
+          if (action === window.google!.picker!.Action.CANCEL) {
+            setDriveActionLoading(false);
+          }
+        })
+        .build();
+
+      picker.setVisible(true);
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : String(error));
+      setDriveActionLoading(false);
+    }
+  };
+
+  const createFolderOnDrive = async () => {
+    setMsg("");
+    setDriveActionLoading(true);
+
+    try {
+      if (!parentFolder) {
+        throw new Error("先に親フォルダを選択してください。");
+      }
+
+      const folderName =
+        folderNameInput.trim() ||
+        `${name.trim() || "案件"}_${pickerTargetRef.current === "estimate" ? "見積" : "請求書"}`;
+
+      const token = await ensureGoogleReady();
+
+      const response = await fetch("https://www.googleapis.com/drive/v3/files", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: folderName,
+          mimeType: "application/vnd.google-apps.folder",
+          parents: [parentFolder.id],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`フォルダ作成に失敗しました: ${errorText}`);
+      }
+
+      const data = (await response.json()) as { id: string; name?: string; webViewLink?: string };
+
+      const folder: DriveFolder = {
+        id: data.id,
+        name: data.name ?? folderName,
+        url: data.webViewLink ?? buildFolderUrl(data.id),
+      };
+
+      setSelectedFolder(folder);
+      setPickerLoading(true);
+      openUploadPickerToFolder(folder);
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : String(error));
+      setDriveActionLoading(false);
+    }
+  };
+
+  const openDriveFlow = (target: PickerTarget) => {
     setMsg("");
     pickerTargetRef.current = target;
-
-    if (!googleApiKey || !googleClientId || !googleAppId) {
-      setMsg("Google Drive 連携用の環境変数が不足しています。");
-      return;
-    }
-
-    if (!pickerReady || !gisReady || !tokenClientRef.current) {
-      setMsg("Google Picker の初期化がまだ完了していません。ページ再読み込み後に数秒待ってから再度お試しください。");
-      return;
-    }
-
-    setPickerLoading(true);
-
-    if (accessTokenRef.current) {
-      openPicker();
-      return;
-    }
-
-    tokenClientRef.current.requestAccessToken({ prompt: "consent" });
+    setSelectedFolder(null);
+    setParentFolder(null);
+    setFolderNameInput(`${name.trim() || "案件"}_${target === "estimate" ? "見積" : "請求書"}`);
+    setDriveModalOpen(true);
   };
 
   const submit = async () => {
@@ -666,13 +832,16 @@ export default function ProjectNewClient() {
                 <input value={estimate} onChange={(e) => setEstimate(e.target.value)} className={styles.input} />
                 <button
                   type="button"
-                  onClick={() => openGooglePicker("estimate")}
+                  onClick={() => openDriveFlow("estimate")}
                   className={styles.btnDrive}
-                  disabled={pickerLoading}
+                  disabled={pickerLoading || driveActionLoading}
                 >
                   {pickerLoading && pickerTargetRef.current === "estimate" ? "読み込み中..." : "Driveから選択"}
                 </button>
               </div>
+              {pickerTargetRef.current === "estimate" && selectedFolder && (
+                <p className={styles.emptyText}>保存先フォルダ: {selectedFolder.name}</p>
+              )}
             </div>
 
             <div className={styles.gridRow}>
@@ -681,13 +850,16 @@ export default function ProjectNewClient() {
                 <input value={invoice} onChange={(e) => setInvoice(e.target.value)} className={styles.input} />
                 <button
                   type="button"
-                  onClick={() => openGooglePicker("invoice")}
+                  onClick={() => openDriveFlow("invoice")}
                   className={styles.btnDrive}
-                  disabled={pickerLoading}
+                  disabled={pickerLoading || driveActionLoading}
                 >
                   {pickerLoading && pickerTargetRef.current === "invoice" ? "読み込み中..." : "Driveから選択"}
                 </button>
               </div>
+              {pickerTargetRef.current === "invoice" && selectedFolder && (
+                <p className={styles.emptyText}>保存先フォルダ: {selectedFolder.name}</p>
+              )}
             </div>
 
             <div className={styles.buttonRow}>
@@ -700,6 +872,76 @@ export default function ProjectNewClient() {
           </>
         )}
       </div>
+
+      {driveModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => !driveActionLoading && setDriveModalOpen(false)}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <h2 className={styles.modalTitle}>Drive 操作</h2>
+            <p className={styles.emptyText}>
+              {pickerTargetRef.current === "estimate" ? "見積" : "請求書"} 用の保存先を選んでください。
+            </p>
+
+            <div className={styles.modalSection}>
+              <button
+                type="button"
+                className={styles.btnGhost}
+                onClick={() => openFolderPicker("existing")}
+                disabled={driveActionLoading}
+              >
+                既存フォルダを選択してアップロード
+              </button>
+            </div>
+
+            <div className={styles.modalSection}>
+              <div className={styles.gridLabel}>親フォルダ</div>
+              <div className={styles.modalInlineRow}>
+                <input
+                  value={parentFolder ? parentFolder.name : ""}
+                  readOnly
+                  className={styles.input}
+                  placeholder="親フォルダを選択してください"
+                />
+                <button
+                  type="button"
+                  className={styles.btnGhost}
+                  onClick={() => openFolderPicker("parent")}
+                  disabled={driveActionLoading}
+                >
+                  親フォルダを選択
+                </button>
+              </div>
+              {parentFolder && <p className={styles.emptyText}>選択中: {parentFolder.name}</p>}
+
+              <div className={styles.gridLabel}>新規フォルダ名</div>
+              <input
+                value={folderNameInput}
+                onChange={(e) => setFolderNameInput(e.target.value)}
+                className={styles.input}
+                placeholder="フォルダ名を入力"
+              />
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                onClick={createFolderOnDrive}
+                disabled={driveActionLoading}
+              >
+                新規フォルダを作成してアップロード
+              </button>
+            </div>
+
+            <div className={styles.buttonRow}>
+              <button
+                type="button"
+                className={styles.btnGhost}
+                onClick={() => setDriveModalOpen(false)}
+                disabled={driveActionLoading}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
