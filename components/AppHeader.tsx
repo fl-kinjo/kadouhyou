@@ -46,6 +46,9 @@ export default function AppHeader() {
         <div style={{ marginBottom: 20, fontWeight: 900 }}>メニュー</div>
 
         <nav style={{ display: "grid", gap: 14 }}>
+          <MenuLink href="/top" label="トップ" onClick={() => setOpen(false)} />
+          <MenuLink href="/attendance" label="勤怠情報" onClick={() => setOpen(false)} />
+          <MenuLink href="/attendance-management" label="勤怠管理" onClick={() => setOpen(false)} />
           <MenuLink href="/project" label="案件管理" onClick={() => setOpen(false)} />
           <MenuLink href="/report" label="業務報告" onClick={() => setOpen(false)} />
           <MenuLink href="/summary" label="サマリー" onClick={() => setOpen(false)} />
@@ -54,6 +57,8 @@ export default function AppHeader() {
           <MenuLink href="/team" label="組織管理" onClick={() => setOpen(false)} />
           <MenuLink href="/employee" label="社員管理" onClick={() => setOpen(false)} />
           <MenuLink href="/job" label="職種管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/leave-request" label="休暇管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/expenses" label="経費管理" onClick={() => setOpen(false)} />
 
           <button type="button" onClick={logout} style={logoutButton} disabled={loggingOut}>
             {loggingOut ? "ログアウト中..." : "ログアウト"}

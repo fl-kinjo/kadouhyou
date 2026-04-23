@@ -1,0 +1,136 @@
+.page {
+  padding: 24px;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  margin-bottom: 18px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.card {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  padding: 18px;
+}
+
+.loadingText {
+  color: #666;
+}
+
+.gridRow {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 14px;
+  padding: 12px 0;
+  align-items: start;
+}
+
+.gridLabel {
+  font-weight: 700;
+  padding-top: 10px;
+}
+
+.projectSelectArea {
+  display: grid;
+  gap: 10px;
+}
+
+.input,
+.select,
+.inputSmall,
+.textarea {
+  width: 100%;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.input,
+.select,
+.inputSmall {
+  height: 42px;
+  padding: 0 12px;
+}
+
+.inputSmall {
+  max-width: 240px;
+}
+
+.textarea {
+  padding: 12px;
+  resize: vertical;
+}
+
+.checkRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  cursor: pointer;
+}
+
+.helpText {
+  font-size: 13px;
+  color: #666;
+}
+
+.buttonRow {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+}
+
+.submitButton {
+  min-width: 160px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: #d91f00;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.submitButton:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 16px;
+  }
+
+  .pageTitle {
+    font-size: 26px;
+  }
+
+  .gridRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .gridLabel {
+    padding-top: 0;
+  }
+
+  .inputSmall {
+    max-width: 100%;
+  }
+}

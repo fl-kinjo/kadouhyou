@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/app/utils/supabase/client";
 import styles from "./summary-client.module.css";
 
-type JobRow = { id: string; name: string; monthly_unit_price: number | null };
+type JobRow = {
+  id: string;
+  name: string;
+  monthly_unit_price: number | null;
+  created_at: string | null;
+};
 type ProfileRow = { id: string; last_name: string | null; first_name: string | null; email: string | null };
 type ProfileJobRow = { profile_id: string; job_id: string };
 type ProjectRow = {
@@ -31,6 +36,14 @@ type IndividualRow = {
   rates: number[];
   avgRate: number;
 };
+
+const JOB_DISPLAY_ORDER = [
+  "ディレクター",
+  "ディレクター（新規事業部）",
+  "ディレクター(オンサイト)",
+  "デザイナー",
+  "エンジニア",
+] as const;
 
 function getFiscalMonths(year: number) {
   const result: { key: string; label: string }[] = [];
@@ -69,7 +82,7 @@ export default function SummaryClient() {
         const fromMonth = fiscalMonths[0]?.key;
         const toMonth = fiscalMonths[fiscalMonths.length - 1]?.key;
         const [jobsRes, profilesRes, profileJobsRes, projectsRes, projectMembersRes, manMonthsRes, plannedCostsRes] = await Promise.all([
-          supabase.from("job").select("id,name,monthly_unit_price").order("created_at", { ascending: true }),
+          supabase.from("job").select("id,name,monthly_unit_price,created_at").order("created_at", { ascending: true }),
           supabase.from("profiles_2").select("id,last_name,first_name,email").order("created_at", { ascending: true }),
           supabase.from("profile_job").select("profile_id,job_id"),
           supabase.from("project").select("id,invoice_amount,invoice_month,member_revenue_share,pm_revenue_share,project_manager_id,status"),
@@ -84,7 +97,26 @@ export default function SummaryClient() {
         if (projectMembersRes.error) throw new Error(projectMembersRes.error.message);
         if (manMonthsRes.error) throw new Error(manMonthsRes.error.message);
         if (plannedCostsRes.error) throw new Error(plannedCostsRes.error.message);
-        const nextJobs = (jobsRes.data ?? []) as JobRow[];
+
+        const orderMap = new Map<string, number>(
+          JOB_DISPLAY_ORDER.map((name, index) => [name, index])
+        );
+        const nextJobs = [...((jobsRes.data ?? []) as JobRow[])].sort((a, b) => {
+          const aOrder = orderMap.get(a.name);
+          const bOrder = orderMap.get(b.name);
+
+          const aRank = aOrder ?? Number.MAX_SAFE_INTEGER;
+          const bRank = bOrder ?? Number.MAX_SAFE_INTEGER;
+
+          if (aRank !== bRank) return aRank - bRank;
+
+          if (aOrder == null && bOrder == null) {
+            return String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""), "ja");
+          }
+
+          return a.name.localeCompare(b.name, "ja");
+        });
+
         setJobs(nextJobs);
         setProfiles((profilesRes.data ?? []) as ProfileRow[]);
         setProfileJobs((profileJobsRes.data ?? []) as ProfileJobRow[]);

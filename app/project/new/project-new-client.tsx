@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/app/utils/supabase/client";
 import styles from "./project-new-client.module.css";
@@ -19,6 +19,75 @@ type Profile = {
   status: number | null;
 };
 
+type GoogleDriveFile = {
+  id: string;
+  name: string;
+  url: string;
+};
+
+type PickerTarget = "estimate" | "invoice";
+
+type GoogleTokenResponse = {
+  access_token: string;
+  error?: string;
+};
+
+type GoogleTokenClient = {
+  requestAccessToken: (options?: { prompt?: string }) => void;
+};
+
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: GoogleTokenResponse) => void;
+          }) => GoogleTokenClient;
+        };
+      };
+      picker?: {
+        Action: {
+          PICKED: string;
+          CANCEL: string;
+        };
+        Response: {
+          ACTION: string;
+          DOCUMENTS: string;
+        };
+        Document: {
+          ID: string;
+          NAME: string;
+          URL: string;
+        };
+        ViewId: {
+          DOCS: string;
+        };
+        DocsView: new (viewId?: string) => {
+          setIncludeFolders: (value: boolean) => any;
+          setSelectFolderEnabled: (value: boolean) => any;
+        };
+        DocsUploadView: new () => any;
+        PickerBuilder: new () => {
+          setAppId: (appId: string) => any;
+          setOAuthToken: (token: string) => any;
+          setDeveloperKey: (key: string) => any;
+          setCallback: (callback: (data: any) => void) => any;
+          addView: (view: any) => any;
+          build: () => {
+            setVisible: (visible: boolean) => void;
+          };
+        };
+      };
+    };
+    gapi?: {
+      load: (api: string, options: { callback: () => void }) => void;
+    };
+  }
+}
+
 const PROJECT_STATUS_OPTIONS = [
   { value: 0, label: "保留" },
   { value: 1, label: "営業中" },
@@ -30,6 +99,8 @@ const PROJECT_STATUS_OPTIONS = [
   { value: 7, label: "プリセールス(無償)" },
   { value: 8, label: "社内案件(無償)" },
 ] as const;
+
+const GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
 function fullName(lastName?: string | null, firstName?: string | null) {
   const name = `${lastName ?? ""}${firstName ?? ""}`.trim();
@@ -83,6 +154,20 @@ export default function ProjectNewClient() {
   const [estimate, setEstimate] = useState("");
   const [invoice, setInvoice] = useState("");
 
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerReady, setPickerReady] = useState(false);
+  const [gisReady, setGisReady] = useState(false);
+
+  const tokenClientRef = useRef<GoogleTokenClient | null>(null);
+  const accessTokenRef = useRef("");
+  const pickerTargetRef = useRef<PickerTarget | null>(null);
+
+  const usedMemberIds = useMemo(() => new Set(memberProfileIds.filter(Boolean)), [memberProfileIds]);
+
+  const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY ?? "";
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+  const googleAppId = process.env.NEXT_PUBLIC_GOOGLE_APP_ID ?? "";
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -115,6 +200,7 @@ export default function ProjectNewClient() {
 
         setClients(nextClients);
         setProfiles(nextProfiles);
+
         if (!clientId && nextClients.length > 0) {
           setClientId(nextClients[0].id);
         }
@@ -128,12 +214,83 @@ export default function ProjectNewClient() {
     load();
   }, [supabase, clientId]);
 
-  const usedMemberIds = useMemo(() => new Set(memberProfileIds.filter(Boolean)), [memberProfileIds]);
+  useEffect(() => {
+    if (!googleApiKey || !googleClientId || !googleAppId) return;
+
+    const appendScript = (src: string, id: string, onload?: () => void) => {
+      const existing = document.getElementById(id) as HTMLScriptElement | null;
+
+      if (existing) {
+        if (existing.dataset.loaded === "true") {
+          onload?.();
+        } else if (onload) {
+          existing.addEventListener("load", onload, { once: true });
+        }
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.defer = true;
+      script.id = id;
+
+      script.onload = () => {
+        script.dataset.loaded = "true";
+        onload?.();
+      };
+
+      script.onerror = () => {
+        setMsg(`Google script の読み込みに失敗しました: ${src}`);
+      };
+
+      document.body.appendChild(script);
+    };
+
+    appendScript("https://apis.google.com/js/api.js", "google-api-script", () => {
+      if (!window.gapi?.load) {
+        setMsg("Google API script は読み込まれましたが、Picker 初期化に失敗しました。");
+        return;
+      }
+
+      window.gapi.load("picker", {
+        callback: () => {
+          setPickerReady(true);
+        },
+      });
+    });
+
+    appendScript("https://accounts.google.com/gsi/client", "google-gis-script", () => {
+      if (!window.google?.accounts?.oauth2) {
+        setMsg("Google GIS script は読み込まれましたが、OAuth 初期化に失敗しました。");
+        return;
+      }
+
+      tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: googleClientId,
+        scope: GOOGLE_SCOPE,
+        callback: (response: GoogleTokenResponse) => {
+          if (response.error) {
+            setMsg(`Google認証に失敗しました: ${response.error}`);
+            setPickerLoading(false);
+            return;
+          }
+
+          accessTokenRef.current = response.access_token;
+          openPicker();
+        },
+      });
+
+      setGisReady(true);
+    });
+  }, [googleApiKey, googleClientId, googleAppId]);
 
   const addMemberRow = () => setMemberProfileIds((current) => [...current, ""]);
+
   const removeMemberRow = (index: number) => {
     setMemberProfileIds((current) => (current.length <= 1 ? current : current.filter((_, idx) => idx !== index)));
   };
+
   const setMemberAt = (index: number, value: string) => {
     setMemberProfileIds((current) => current.map((item, idx) => (idx === index ? value : item)));
   };
@@ -190,6 +347,89 @@ export default function ProjectNewClient() {
     return profile.id;
   };
 
+  const handlePickedFile = (file: GoogleDriveFile) => {
+    if (pickerTargetRef.current === "estimate") {
+      setEstimate(file.url);
+    } else if (pickerTargetRef.current === "invoice") {
+      setInvoice(file.url);
+    }
+    setPickerLoading(false);
+  };
+
+  const openPicker = () => {
+    if (!window.google?.picker || !accessTokenRef.current) {
+      setMsg("Google Picker の初期化に失敗しました。");
+      setPickerLoading(false);
+      return;
+    }
+
+    const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(false);
+
+    const uploadView = new window.google.picker.DocsUploadView();
+
+    const picker = new window.google.picker.PickerBuilder()
+      .setAppId(googleAppId)
+      .setOAuthToken(accessTokenRef.current)
+      .setDeveloperKey(googleApiKey)
+      .addView(docsView)
+      .addView(uploadView)
+      .setCallback((data: any) => {
+        const action = data[window.google!.picker!.Response.ACTION];
+
+        if (action === window.google!.picker!.Action.PICKED) {
+          const doc = data[window.google!.picker!.Response.DOCUMENTS]?.[0];
+          if (!doc) {
+            setPickerLoading(false);
+            return;
+          }
+
+          const file: GoogleDriveFile = {
+            id: doc[window.google!.picker!.Document.ID],
+            name: doc[window.google!.picker!.Document.NAME] ?? "",
+            url:
+              doc[window.google!.picker!.Document.URL] ||
+              `https://drive.google.com/file/d/${doc[window.google!.picker!.Document.ID]}/view`,
+          };
+
+          handlePickedFile(file);
+          return;
+        }
+
+        if (action === window.google!.picker!.Action.CANCEL) {
+          setPickerLoading(false);
+        }
+      })
+      .build();
+
+    picker.setVisible(true);
+  };
+
+  const openGooglePicker = (target: PickerTarget) => {
+    setMsg("");
+    pickerTargetRef.current = target;
+
+    if (!googleApiKey || !googleClientId || !googleAppId) {
+      setMsg("Google Drive 連携用の環境変数が不足しています。");
+      return;
+    }
+
+    if (!pickerReady || !gisReady || !tokenClientRef.current) {
+      setMsg("Google Picker の初期化がまだ完了していません。ページ再読み込み後に数秒待ってから再度お試しください。");
+      return;
+    }
+
+    setPickerLoading(true);
+
+    if (accessTokenRef.current) {
+      openPicker();
+      return;
+    }
+
+    tokenClientRef.current.requestAccessToken({ prompt: "consent" });
+  };
+
   const submit = async () => {
     setMsg("");
     const validationError = validate();
@@ -199,6 +439,7 @@ export default function ProjectNewClient() {
     }
 
     setSaving(true);
+
     try {
       const updaterId = await getCurrentUpdaterId();
       const invoiceAmountNum = toNumberOrNull(invoiceAmount);
@@ -262,6 +503,10 @@ export default function ProjectNewClient() {
           <p className={styles.emptyText}>読み込み中...</p>
         ) : (
           <>
+            <p className={styles.emptyText}>
+              Google Picker: {pickerReady ? "ready" : "loading"} / Google OAuth: {gisReady ? "ready" : "loading"}
+            </p>
+
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>案件名</div>
               <input value={name} onChange={(e) => setName(e.target.value)} className={styles.input} />
@@ -273,7 +518,8 @@ export default function ProjectNewClient() {
                 <option value="">選択してください</option>
                 {clients.map((client) => (
                   <option key={client.id} value={client.id}>
-                    {client.name}{client.is_focus === 1 ? " ★" : ""}
+                    {client.name}
+                    {client.is_focus === 1 ? " ★" : ""}
                   </option>
                 ))}
               </select>
@@ -281,17 +527,31 @@ export default function ProjectNewClient() {
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>開始日</div>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.inputSmall} />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className={styles.inputSmall}
+              />
             </div>
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>終了日</div>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.inputSmall} />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className={styles.inputSmall}
+              />
             </div>
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>案件責任者</div>
-              <select value={projectManagerId} onChange={(e) => setProjectManagerId(e.target.value)} className={styles.select}>
+              <select
+                value={projectManagerId}
+                onChange={(e) => setProjectManagerId(e.target.value)}
+                className={styles.select}
+              >
                 <option value="">選択してください</option>
                 {profiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
@@ -306,11 +566,7 @@ export default function ProjectNewClient() {
               <div className={styles.directorWrap}>
                 {memberProfileIds.map((profileId, index) => (
                   <div key={`member-${index}`} className={styles.directorRow}>
-                    <select
-                      value={profileId}
-                      onChange={(e) => setMemberAt(index, e.target.value)}
-                      className={styles.select}
-                    >
+                    <select value={profileId} onChange={(e) => setMemberAt(index, e.target.value)} className={styles.select}>
                       <option value="">選択してください</option>
                       {profiles.map((profile) => {
                         const alreadyUsed = usedMemberIds.has(profile.id) && profile.id !== profileId;
@@ -406,12 +662,32 @@ export default function ProjectNewClient() {
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>見積リンク</div>
-              <input value={estimate} onChange={(e) => setEstimate(e.target.value)} className={styles.input} />
+              <div className={styles.linkFieldWrap}>
+                <input value={estimate} onChange={(e) => setEstimate(e.target.value)} className={styles.input} />
+                <button
+                  type="button"
+                  onClick={() => openGooglePicker("estimate")}
+                  className={styles.btnDrive}
+                  disabled={pickerLoading}
+                >
+                  {pickerLoading && pickerTargetRef.current === "estimate" ? "読み込み中..." : "Driveから選択"}
+                </button>
+              </div>
             </div>
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>請求書リンク</div>
-              <input value={invoice} onChange={(e) => setInvoice(e.target.value)} className={styles.input} />
+              <div className={styles.linkFieldWrap}>
+                <input value={invoice} onChange={(e) => setInvoice(e.target.value)} className={styles.input} />
+                <button
+                  type="button"
+                  onClick={() => openGooglePicker("invoice")}
+                  className={styles.btnDrive}
+                  disabled={pickerLoading}
+                >
+                  {pickerLoading && pickerTargetRef.current === "invoice" ? "読み込み中..." : "Driveから選択"}
+                </button>
+              </div>
             </div>
 
             <div className={styles.buttonRow}>

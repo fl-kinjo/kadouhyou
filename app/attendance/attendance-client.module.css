@@ -1,0 +1,356 @@
+.page {
+  padding: 24px;
+  max-width: 1220px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  margin-bottom: 18px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.monthRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.monthButton {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.monthTitle {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.summaryRow {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.summaryCard {
+  min-width: 190px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  background: #f3f3f3;
+  border: 1px solid #e3e3e3;
+}
+
+.summaryLabel {
+  font-size: 13px;
+  color: #444;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.summaryValue,
+.summaryValueDanger {
+  font-size: 38px;
+  line-height: 1;
+  font-weight: 900;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.summaryValueDanger {
+  color: #d13d3d;
+}
+
+.summaryUnit {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.summarySub {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.tableFrame {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #d8d8d8;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d0d0d0;
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ededed;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.emptyCell {
+  padding: 24px 12px;
+  color: #666;
+}
+
+.dateCell {
+  font-weight: 700;
+}
+
+.sunday {
+  color: #d63a3a;
+}
+
+.saturday {
+  color: #3a7ad6;
+}
+
+.rowMissing {
+  background: #f8dbe5;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.statusWork {
+  background: #cfe9bf;
+  color: #2d6a1f;
+}
+
+.statusHoliday {
+  background: #bdbdbd;
+  color: #333;
+}
+
+.statusPaid {
+  background: #f3bed4;
+  color: #8b2f55;
+}
+
+.statusAm {
+  background: #f4d296;
+  color: #7a5310;
+}
+
+.statusPm {
+  background: #8fc3ee;
+  color: #144f87;
+}
+
+.statusSummer {
+  background: #f2e08a;
+  color: #745f00;
+}
+
+.statusSpecial {
+  background: #d5c4f0;
+  color: #553a86;
+}
+
+.statusUnpaid {
+  background: #dcb5ff;
+  color: #6a2ca5;
+}
+
+.statusMissing {
+  background: #ffd7e5;
+  color: #a3325d;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 16px;
+  }
+
+  .pageTitle {
+    font-size: 26px;
+  }
+
+  .summaryValue,
+  .summaryValueDanger {
+    font-size: 30px;
+  }
+
+  .summaryUnit {
+    font-size: 18px;
+  }
+}
+
+.editButton {
+  min-width: 52px;
+  height: 28px;
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+}
+
+.modalCard {
+  width: 100%;
+  max-width: 560px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.modalSubTitle {
+  margin-top: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+}
+
+.modalFields {
+  margin-top: 20px;
+  display: grid;
+  gap: 18px;
+}
+
+.modalFieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.modalField {
+  display: grid;
+  gap: 8px;
+}
+
+.modalLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: #444;
+}
+
+.modalInput {
+  width: 100%;
+  height: 40px;
+  border: 1px solid #c5c5c5;
+  border-radius: 6px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.modalActionRow {
+  margin-top: 26px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.modalCancelButton,
+.modalSaveButton {
+  min-width: 140px;
+  height: 42px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.modalCancelButton {
+  background: #fff;
+  color: #d12c2c;
+  border: 1px solid #d12c2c;
+}
+
+.modalSaveButton {
+  background: #d91f00;
+  color: #fff;
+  border: none;
+}
+
+@media (max-width: 640px) {
+  .modalCard {
+    padding: 18px;
+  }
+
+  .modalTitle {
+    font-size: 24px;
+  }
+
+  .modalFieldRow {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .modalActionRow {
+    flex-direction: column;
+  }
+
+  .modalCancelButton,
+  .modalSaveButton {
+    width: 100%;
+  }
+}

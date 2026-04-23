@@ -27,7 +27,7 @@ export default function LoginClient() {
     setLoading(false);
 
     if (error) return setMsg(error.message);
-    router.replace("/summary");
+    router.replace("/top");
   };
 
   const loginWithGoogle = async () => {

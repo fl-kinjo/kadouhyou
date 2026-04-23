@@ -71,6 +71,10 @@
   border-radius: 8px;
 }
 
+.searchRow {
+  margin-top: 12px;
+}
+
 .checkboxLabel {
   display: inline-flex;
   gap: 8px;
