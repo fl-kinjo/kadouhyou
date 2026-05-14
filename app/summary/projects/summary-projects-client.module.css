@@ -1,0 +1,86 @@
+.page {
+  padding: 24px;
+  max-width: 1400px;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.pageTitle {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.lead {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+}
+
+.backButton {
+  min-width: 96px;
+  height: 40px;
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.errorText {
+  margin: 0 0 12px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.tableFrame {
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #efefef;
+  border-bottom: 1px solid #d8d8d8;
+  padding: 12px 10px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.table td {
+  border-bottom: 1px solid #eee;
+  padding: 14px 10px;
+  font-size: 14px;
+  vertical-align: top;
+}
+
+.detailLink {
+  color: #0b57d0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .tableFrame {
+    overflow-x: auto;
+  }
+
+  .table {
+    min-width: 900px;
+  }
+}

@@ -1,0 +1,358 @@
+.page {
+  padding: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  margin-bottom: 20px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.monthRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.monthButton {
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+}
+
+.monthTitle {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.tabBar {
+  display: flex;
+  gap: 8px;
+  border-bottom: 4px solid #f3cad8;
+  padding-bottom: 8px;
+  margin-bottom: 18px;
+}
+
+.tabButton {
+  min-width: 118px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: #d5d5d5;
+  color: #222;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tabButtonActive {
+  background: #f3cad8;
+}
+
+.subTabBar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.subTabButton {
+  min-width: 92px;
+  height: 32px;
+  border: 1px solid #bbb;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.subTabButtonActive {
+  background: #ffe2e6;
+  border-color: #f098ac;
+  color: #d24161;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.emptyState {
+  padding: 28px 20px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fff;
+  color: #666;
+}
+
+.employeeSection,
+.detailSection,
+.listSection {
+  margin-top: 10px;
+}
+
+.employeeTableFrame {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.employeeTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.employeeTable th {
+  background: #d8d8d8;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d0d0d0;
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.employeeTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ededed;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.detailButton {
+  min-width: 52px;
+  height: 30px;
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.breadcrumbRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 13px;
+}
+
+.breadcrumbButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 700;
+}
+
+.breadcrumbArrow {
+  color: #666;
+}
+
+.breadcrumbCurrent {
+  font-weight: 700;
+}
+
+.summaryCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+  max-width: 760px;
+}
+
+.summaryCard {
+  border-radius: 10px;
+  background: #f3f3f3;
+  padding: 16px;
+}
+
+.summaryLabel {
+  font-size: 13px;
+  color: #444;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.summaryValue {
+  font-size: 20px;
+  font-weight: 900;
+  color: #111;
+}
+
+.pendingText {
+  color: #f07c7c;
+}
+
+.requestList {
+  display: grid;
+  gap: 20px;
+}
+
+.requestCard {
+  max-width: 760px;
+  border: 1px solid #d9d9d9;
+  border-radius: 10px;
+  background: #fff;
+  padding: 18px;
+}
+
+.requestHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.requestDate {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.requestAmount {
+  font-size: 18px;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.requestMeta {
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.statusBadge {
+  min-width: 96px;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.statusPending {
+  background: #f1d092;
+  color: #6e511d;
+}
+
+.statusApproved {
+  background: #cde7be;
+  color: #2f6d23;
+}
+
+.statusRejected {
+  background: #f3c9d4;
+  color: #9a2947;
+}
+
+.requestItems {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.requestItemRow {
+  display: grid;
+  grid-template-columns: 90px 130px 90px 1fr 100px;
+  gap: 10px;
+  align-items: center;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.requestItemDate,
+.requestItemName,
+.requestItemAmount,
+.requestItemPurpose,
+.requestItemInvoice {
+  color: #222;
+}
+
+.invoiceBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  height: 24px;
+  border-radius: 999px;
+  background: #ececec;
+  font-size: 11px;
+  font-weight: 700;
+  color: #444;
+}
+
+.actionRow {
+  display: flex;
+  gap: 10px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid #e5e5e5;
+}
+
+.actionButton {
+  min-width: 68px;
+  height: 34px;
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .summaryCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .requestItemRow {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 16px;
+  }
+
+  .pageTitle {
+    font-size: 26px;
+  }
+
+  .requestHeader {
+    flex-direction: column;
+  }
+
+  .summaryCards {
+    grid-template-columns: 1fr;
+  }
+
+  .actionRow {
+    flex-wrap: wrap;
+  }
+
+  .employeeTableFrame {
+    overflow-x: auto;
+  }
+
+  .employeeTable {
+    min-width: 760px;
+  }
+}

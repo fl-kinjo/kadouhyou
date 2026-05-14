@@ -58,7 +58,8 @@ export default function AppHeader() {
           <MenuLink href="/employee" label="社員管理" onClick={() => setOpen(false)} />
           <MenuLink href="/job" label="職種管理" onClick={() => setOpen(false)} />
           <MenuLink href="/leave-request" label="休暇管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/expenses" label="経費管理" onClick={() => setOpen(false)} />
+          <MenuLink href="/expenses" label="経費申請" onClick={() => setOpen(false)} />
+          <MenuLink href="/expenses-management" label="経費管理" onClick={() => setOpen(false)} />
 
           <button type="button" onClick={logout} style={logoutButton} disabled={loggingOut}>
             {loggingOut ? "ログアウト中..." : "ログアウト"}

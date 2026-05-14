@@ -196,3 +196,35 @@
     text-align: left;
   }
 }
+
+.tabBar {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 12px;
+}
+
+.tabButton {
+  min-width: 120px;
+  height: 40px;
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tabButtonActive {
+  background: #222;
+  color: #fff;
+  border-color: #222;
+}
+
+.valueLink {
+  color: #0b57d0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.valueLink:hover {
+  opacity: 0.75;
+}

@@ -4,6 +4,7 @@ import { createClient } from "@/app/utils/supabase/server";
 import ProjectDetailActions from "./project-detail-actions";
 import PlannedCostSection from "./planned-cost-section";
 import ActualCostSection from "./actual-cost-section";
+import RevenueAllocationSection from "./revenue-allocation-section";
 import styles from "./page.module.css";
 
 type PageProps = {
@@ -15,6 +16,16 @@ type Profile = {
   last_name: string | null;
   first_name: string | null;
   status: number | null;
+};
+
+type ProfileJob = {
+  profile_id: string;
+  job_id: string;
+};
+
+type Job = {
+  id: string;
+  name: string;
 };
 
 type ProjectPlannedCost = {
@@ -130,6 +141,7 @@ export default async function ProjectDetailPage(props: PageProps) {
     { data: reports, error: reportsError },
     { data: partners, error: partnersError },
     { data: jobs, error: jobsError },
+    { data: profileJobs, error: profileJobsError },
   ] = await Promise.all([
     supabase.from("client").select("id,name").eq("id", project.client_id).maybeSingle(),
     supabase.from("project_member").select("profile_id").eq("project_id", id),
@@ -158,6 +170,7 @@ export default async function ProjectDetailPage(props: PageProps) {
       .order("work_date", { ascending: true }),
     supabase.from("partner").select("id,name").order("name", { ascending: true }),
     supabase.from("job").select("id,name").order("name", { ascending: true }),
+    supabase.from("profile_job").select("profile_id,job_id"),
   ]);
 
   if (membersError) throw new Error(membersError.message);
@@ -167,6 +180,7 @@ export default async function ProjectDetailPage(props: PageProps) {
   if (reportsError) throw new Error(reportsError.message);
   if (partnersError) throw new Error(partnersError.message);
   if (jobsError) throw new Error(jobsError.message);
+  if (profileJobsError) throw new Error(profileJobsError.message);
 
   const allProfiles = (profiles ?? []) as Profile[];
   const profileMap = new Map(allProfiles.map((profile) => [profile.id, profile]));
@@ -175,6 +189,24 @@ export default async function ProjectDetailPage(props: PageProps) {
     .map((member) => profileMap.get(member.profile_id))
     .filter(Boolean)
     .map((profile) => fullName(profile?.last_name, profile?.first_name));
+
+  const jobMap = new Map(((jobs ?? []) as Job[]).map((job) => [job.id, job.name]));
+  const profileJobRows = (profileJobs ?? []) as ProfileJob[];
+  const profileJobMap = new Map<string, string>();
+  for (const row of profileJobRows) {
+    if (!profileJobMap.has(row.profile_id)) {
+      profileJobMap.set(row.profile_id, jobMap.get(row.job_id) ?? "メンバー");
+    }
+  }
+
+  const allocationMembers = (members ?? []).map((member) => {
+    const profile = profileMap.get(member.profile_id);
+    return {
+      profile_id: member.profile_id,
+      assigneeName: fullName(profile?.last_name, profile?.first_name),
+      job_name: profileJobMap.get(member.profile_id) ?? "メンバー",
+    };
+  });
 
   return (
     <main className={styles.page}>
@@ -261,6 +293,16 @@ export default async function ProjectDetailPage(props: PageProps) {
           </div>
         </div>
       </section>
+
+      <RevenueAllocationSection
+        startDate={project.start_date}
+        endDate={project.end_date}
+        invoiceAmount={project.invoice_amount}
+        pmRevenueShare={project.pm_revenue_share}
+        memberRevenueShare={project.member_revenue_share}
+        projectManager={projectManager ?? null}
+        members={allocationMembers}
+      />
 
       <PlannedCostSection
         projectId={project.id}
