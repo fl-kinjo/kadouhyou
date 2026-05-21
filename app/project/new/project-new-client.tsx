@@ -100,14 +100,17 @@ declare global {
 
 const PROJECT_STATUS_OPTIONS = [
   { value: 0, label: "保留" },
-  { value: 1, label: "営業中" },
-  { value: 2, label: "確定前" },
-  { value: 3, label: "確定" },
-  { value: 4, label: "進行中" },
-  { value: 5, label: "完了" },
-  { value: 6, label: "滞留" },
-  { value: 7, label: "プリセールス(無償)" },
-  { value: 8, label: "社内案件(無償)" },
+  { value: 1, label: "営業中（高）" },
+  { value: 2, label: "営業中（中）" },
+  { value: 3, label: "営業中（低）" },
+  { value: 4, label: "営業中（最終調整）" },
+  { value: 5, label: "確定前" },
+  { value: 6, label: "確定" },
+  { value: 7, label: "進行中" },
+  { value: 8, label: "完了" },
+  { value: 9, label: "滞留" },
+  { value: 10, label: "プリセールス(無償)" },
+  { value: 11, label: "社内案件(無償)" },
 ] as const;
 
 const GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.file";

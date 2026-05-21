@@ -61,14 +61,17 @@ type ReportRow = {
 
 const STATUS_LABELS: Record<number, string> = {
   0: "保留",
-  1: "営業中",
-  2: "確定前",
-  3: "確定",
-  4: "進行中",
-  5: "完了",
-  6: "滞留",
-  7: "プリセールス(無償)",
-  8: "社内案件(無償)",
+  1: "営業中（高）",
+  2: "営業中（中）",
+  3: "営業中（低）",
+  4: "営業中（最終調整）",
+  5: "確定前",
+  6: "確定",
+  7: "進行中",
+  8: "完了",
+  9: "滞留",
+  10: "プリセールス(無償)",
+  11: "社内案件(無償)",
 };
 
 function formatDate(value: string | null) {
@@ -213,6 +216,9 @@ export default async function ProjectDetailPage(props: PageProps) {
       <div className={styles.backRow}>
         <Link href="/project" className={styles.backLink}>
           ← 戻る
+        </Link>
+        <Link href={`/project/${id}/test`} className={styles.backLink}>
+          test
         </Link>
       </div>
 

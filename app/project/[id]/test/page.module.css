@@ -1,0 +1,524 @@
+.page {
+  padding: 24px;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.backRow {
+  display: flex;
+  align-items: center;
+}
+
+.backLink {
+  color: #111;
+  text-decoration: none;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.topBorder {
+  border-top: 1px solid #ddd;
+  margin-top: 16px;
+  padding-top: 18px;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.headerLeft {
+  min-width: 0;
+}
+
+.pageTitle {
+  margin: 0 0 10px;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.metaLine {
+  color: #666;
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.metaDivider {
+  display: inline-block;
+  width: 8px;
+}
+
+.statusRow {
+  margin-top: 16px;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  height: 30px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: #cde7be;
+  color: #2f6d23;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.actionWrap {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.deleteButton,
+.editButton,
+.salesEditButton,
+.modalCancelButton,
+.modalSaveButton {
+  min-width: 250px;
+  height: 52px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  text-decoration: none;
+  font-size: 16px;
+}
+
+.deleteButton,
+.modalCancelButton {
+  border: 1px solid #d70000;
+  background: #fff;
+  color: #d70000;
+  cursor: pointer;
+}
+
+.editButton,
+.salesEditButton,
+.modalSaveButton {
+  border: 1px solid #d70000;
+  background: #d70000;
+  color: #fff;
+  cursor: pointer;
+}
+
+.modalSaveButton:disabled,
+.salesEditButton:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.actionErrorText {
+  width: 100%;
+  margin: 0;
+  color: #b00020;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.cardSummaryRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.summaryCard {
+  background: #f3f3f3;
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.summaryLabel {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.summaryValue {
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+
+.summarySub {
+  font-size: 14px;
+  color: #333;
+}
+
+.twoColumnGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 36px;
+}
+
+.panel {
+  border: 1px solid #cfcfcf;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.panelHeader {
+  font-size: 18px;
+  font-weight: 900;
+  padding: 16px 18px;
+  border-bottom: 1px solid #d9d9d9;
+  background: #fff;
+}
+
+.infoTable {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+}
+
+.labelCell,
+.valueCell {
+  min-height: 52px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #ddd;
+  font-size: 15px;
+}
+
+.labelCell {
+  color: #9a9a9a;
+  background: #fff;
+  font-weight: 700;
+}
+
+.valueCell {
+  background: #fff;
+  color: #111;
+  word-break: break-word;
+}
+
+.infoTable > :nth-last-child(-n + 2) {
+  border-bottom: none;
+}
+
+.docLink {
+  color: #4f8fd7;
+  text-decoration: underline;
+}
+
+.profitCard {
+  margin: 16px 18px;
+  border-radius: 12px;
+  background: #f3f3f3;
+  padding: 16px 18px;
+}
+
+.profitLabel {
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.profitValue {
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+
+.profitSub {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.salesSection {
+  margin-top: 46px;
+}
+
+.salesHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.salesTitle {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.salesTableWrap {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #d7d7d7;
+  background: #fff;
+}
+
+.salesTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.salesTable th {
+  background: #d9d9d9;
+  padding: 14px 12px;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.salesTable th:first-child,
+.salesTable th:nth-child(2) {
+  text-align: left;
+}
+
+.salesTable td {
+  padding: 14px 12px;
+  border-top: 1px solid #e6e6e6;
+  font-size: 15px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.salesTable td:first-child,
+.salesTable td:nth-child(2) {
+  text-align: left;
+}
+
+.totalRow td {
+  background: #e1e1e1;
+  font-weight: 900;
+}
+
+.emptyCell {
+  text-align: center !important;
+  color: #666;
+}
+
+/* modal */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.modalCard {
+  width: min(1300px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 20px;
+  padding: 36px 34px 28px;
+}
+
+.modalTitle {
+  margin: 0;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.modalLead {
+  margin: 18px 0 28px;
+  text-align: center;
+  font-size: 16px;
+  color: #222;
+}
+
+.modalTableWrap {
+  border: 1px solid #d7d7d7;
+  border-radius: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #fff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modalTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.modalTable th {
+  background: #d9d9d9;
+  padding: 18px 14px;
+  font-size: 16px;
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.modalTable th:first-child,
+.modalTable th:nth-child(2) {
+  text-align: left;
+}
+
+.modalTable td {
+  border-top: 1px solid #e6e6e6;
+  padding: 16px 14px;
+  font-size: 15px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.modalTable td:first-child,
+.modalTable td:nth-child(2) {
+  text-align: left;
+}
+
+.modalInput {
+  width: 140px;
+  height: 44px;
+  border: 1px solid #999;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.modalSummaryRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 44px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+
+.modalSummaryItem {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.modalSummaryLabel {
+  font-size: 20px;
+  font-weight: 900;
+  color: #4c4c4c;
+}
+
+.modalSummaryValue {
+  font-size: 22px;
+  font-weight: 900;
+  color: #4c4c4c;
+}
+
+.modalSummaryValueError {
+  color: #d70000;
+}
+
+.modalButtonRow {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-top: 36px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1100px) {
+  .cardSummaryRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .twoColumnGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 16px;
+  }
+
+  .pageTitle {
+    font-size: 28px;
+  }
+
+  .cardSummaryRow {
+    grid-template-columns: 1fr;
+  }
+
+  .summaryValue,
+  .profitValue {
+    font-size: 28px;
+  }
+
+  .salesTableWrap {
+    overflow-x: auto;
+  }
+
+  .actionWrap {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .deleteButton,
+  .editButton,
+  .salesEditButton,
+  .modalCancelButton,
+  .modalSaveButton {
+    min-width: 220px;
+  }
+
+  .infoTable {
+    grid-template-columns: 1fr;
+  }
+
+  .labelCell,
+  .valueCell {
+    min-height: 46px;
+  }
+
+  .infoTable > :nth-last-child(-n + 2) {
+    border-bottom: 1px solid #ddd;
+  }
+
+  .infoTable > :last-child {
+    border-bottom: none;
+  }
+
+  .modalCard {
+    padding: 24px 16px 20px;
+  }
+
+  .modalTitle {
+    font-size: 24px;
+  }
+
+  .modalLead {
+    font-size: 14px;
+  }
+
+  .modalSummaryLabel,
+  .modalSummaryValue {
+    font-size: 18px;
+  }
+}
