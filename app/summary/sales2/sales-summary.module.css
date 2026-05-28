@@ -1,0 +1,303 @@
+.page {
+  padding: 24px;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.topRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.topBorder {
+  border-top: 1px solid #eee;
+  margin-top: 16px;
+  padding-top: 18px;
+}
+
+.errorText {
+  margin: 0 0 12px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.warningText {
+  margin: 0 0 12px;
+  color: #9a6200;
+  font-weight: 700;
+}
+
+.tabBar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.tabButton {
+  min-width: 120px;
+  height: 34px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: #d5d5d5;
+  color: #444;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tabButtonActive {
+  background: #f3cad8;
+  color: #111;
+}
+
+.tabBorder {
+  border-bottom: 4px solid #f3cad8;
+  margin-bottom: 16px;
+}
+
+.section {
+  margin-top: 8px;
+}
+
+.headerLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.rangeSubText {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: 1.05fr 1.95fr;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.bigSummaryCard,
+.smallSummaryCard {
+  background: #f3f3f3;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.smallSummaryCard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.smallCardBlock {
+  min-width: 0;
+}
+
+.cardLabel {
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.cardValue {
+  font-size: 22px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.cardValueSmall {
+  font-size: 18px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.cardSubRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.smallMuted {
+  font-size: 12px;
+  color: #666;
+}
+
+.amountGreen {
+  color: #1f9d45;
+  font-weight: 900;
+}
+
+.amountRed {
+  color: #d71c00;
+  font-weight: 900;
+}
+
+.amountBlue {
+  color: #4b95df;
+  font-weight: 900;
+}
+
+.amountNeutral {
+  color: #111;
+  font-weight: 900;
+}
+
+.accordionSection {
+  display: grid;
+  gap: 10px;
+}
+
+.accordionBlock {
+  border: 1px solid #cfcfcf;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.accordionHeader {
+  width: 100%;
+  border: none;
+  background: #d8d8d8;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.accordionHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.accordionTitle {
+  font-size: 15px;
+  font-weight: 900;
+  color: #111;
+}
+
+.accordionCount {
+  font-size: 12px;
+  color: #666;
+}
+
+.accordionHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.chevron {
+  font-size: 16px;
+  color: #555;
+}
+
+.accordionBody {
+  background: #fff;
+}
+
+.itemRow {
+  padding: 12px 16px;
+  border-top: 1px solid #e7e7e7;
+}
+
+.itemTopRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.itemTitleLink {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111;
+  text-decoration: none;
+}
+
+.itemTitleLink:hover {
+  text-decoration: underline;
+}
+
+.itemMeta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #777;
+  line-height: 1.5;
+}
+
+.itemNote {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #888;
+  text-align: right;
+}
+
+.emptyRow {
+  padding: 16px;
+  font-size: 13px;
+  color: #666;
+}
+
+@media (max-width: 900px) {
+  .summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .smallSummaryCard {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 16px;
+  }
+
+  .pageTitle {
+    font-size: 26px;
+  }
+
+  .cardValue {
+    font-size: 20px;
+  }
+
+  .cardValueSmall {
+    font-size: 17px;
+  }
+
+  .itemTopRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .itemNote {
+    text-align: left;
+  }
+}

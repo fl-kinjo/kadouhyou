@@ -1,9 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/app/utils/supabase/client";
+
+const MENU_GROUPS = [
+  {
+    key: "attendance",
+    title: "勤怠系",
+    items: [
+      { href: "/attendance", label: "勤怠入力" },
+      { href: "/attendance-management", label: "勤怠管理" },
+      { href: "/leave-request", label: "休暇申請" },
+      { href: "/report", label: "業務報告" },
+    ],
+  },
+  {
+    key: "request",
+    title: "申請系",
+    items: [
+      { href: "/expenses", label: "経費申請" },
+      { href: "/expenses-management", label: "経費管理" },
+    ],
+  },
+  {
+    key: "project",
+    title: "案件系",
+    items: [
+      { href: "/project", label: "案件管理" },
+      { href: "/summary", label: "案件サマリー" },
+      { href: "/summary/sales2", label: "営業サマリー" },
+      { href: "/client", label: "クライアント管理" },
+      { href: "/partner", label: "パートナー管理" },
+    ],
+  },
+  {
+    key: "general",
+    title: "総務管理系",
+    items: [
+      { href: "/employee", label: "社員管理" },
+      { href: "/team", label: "組織管理" },
+      { href: "/job", label: "職種管理" },
+    ],
+  },
+] as const;
 
 export default function AppHeader() {
   const [open, setOpen] = useState(false);
@@ -12,9 +54,29 @@ export default function AppHeader() {
   const router = useRouter();
   const supabase = createClient();
 
+  const initialGroupState = useMemo(
+    () =>
+      MENU_GROUPS.reduce<Record<string, boolean>>((acc, group) => {
+        acc[group.key] = false;
+        return acc;
+      }, {}),
+    []
+  );
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialGroupState);
+
   if (pathname === "/login") {
     return null;
   }
+
+  const closeDrawer = () => setOpen(false);
+
+  const toggleGroup = (groupKey: string) => {
+    setOpenGroups((current) => ({
+      ...current,
+      [groupKey]: !current[groupKey],
+    }));
+  };
 
   const logout = async () => {
     setLoggingOut(true);
@@ -28,14 +90,23 @@ export default function AppHeader() {
   return (
     <>
       <header style={header}>
-        <button onClick={() => setOpen(true)} style={hamburger}>
+        <button onClick={() => setOpen(true)} style={hamburger} type="button">
           ☰
         </button>
 
-        <div style={{ fontWeight: 900 }}>KINTSURU</div>
+        <Link href="/top" style={logoLink} onClick={closeDrawer}>
+          <Image
+            src="/image/header-logo.png"
+            alt="KINTSURU"
+            width={200}
+            height={60}
+            priority
+            style={logoImage}
+          />
+        </Link>
       </header>
 
-      {open && <div style={overlay} onClick={() => setOpen(false)} />}
+      {open && <div style={overlay} onClick={closeDrawer} />}
 
       <aside
         style={{
@@ -45,21 +116,38 @@ export default function AppHeader() {
       >
         <div style={{ marginBottom: 20, fontWeight: 900 }}>メニュー</div>
 
-        <nav style={{ display: "grid", gap: 14 }}>
-          <MenuLink href="/top" label="トップ" onClick={() => setOpen(false)} />
-          <MenuLink href="/attendance" label="勤怠情報" onClick={() => setOpen(false)} />
-          <MenuLink href="/attendance-management" label="勤怠管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/project" label="案件管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/report" label="業務報告" onClick={() => setOpen(false)} />
-          <MenuLink href="/summary" label="サマリー" onClick={() => setOpen(false)} />
-          <MenuLink href="/client" label="クライアント管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/partner" label="パートナー管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/team" label="組織管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/employee" label="社員管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/job" label="職種管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/leave-request" label="休暇管理" onClick={() => setOpen(false)} />
-          <MenuLink href="/expenses" label="経費申請" onClick={() => setOpen(false)} />
-          <MenuLink href="/expenses-management" label="経費管理" onClick={() => setOpen(false)} />
+        <nav style={navWrap}>
+          <MenuLink href="/top" label="トップ" onClick={closeDrawer} />
+
+          {MENU_GROUPS.map((group) => {
+            const isOpen = openGroups[group.key];
+
+            return (
+              <div key={group.key} style={groupWrap}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.key)}
+                  style={groupButton}
+                >
+                  <span>{group.title}</span>
+                  <span style={groupChevron}>{isOpen ? "▾" : "▸"}</span>
+                </button>
+
+                {isOpen && (
+                  <div style={groupLinks}>
+                    {group.items.map((item) => (
+                      <MenuLink
+                        key={item.href}
+                        href={item.href}
+                        label={item.label}
+                        onClick={closeDrawer}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           <button type="button" onClick={logout} style={logoutButton} disabled={loggingOut}>
             {loggingOut ? "ログアウト中..." : "ログアウト"}
@@ -70,7 +158,15 @@ export default function AppHeader() {
   );
 }
 
-function MenuLink({ href, label, onClick }: { href: string; label: string; onClick?: () => void }) {
+function MenuLink({
+  href,
+  label,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  onClick?: () => void;
+}) {
   return (
     <Link href={href} style={link} onClick={onClick}>
       {label}
@@ -98,6 +194,19 @@ const hamburger: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const logoLink: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  textDecoration: "none",
+  marginTop: 10,
+};
+
+const logoImage: React.CSSProperties = {
+  width: "auto",
+  height: 60,
+  objectFit: "contain",
+};
+
 const overlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
@@ -109,13 +218,49 @@ const drawer: React.CSSProperties = {
   position: "fixed",
   top: 0,
   left: 0,
-  width: 260,
+  width: 280,
   height: "100%",
   background: "#f5f5f5",
   padding: 20,
   zIndex: 40,
   transition: "0.25s",
   overflowY: "auto",
+};
+
+const navWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 18,
+};
+
+const groupWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const groupButton: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  width: "100%",
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  color: "#666",
+  fontSize: 13,
+  fontWeight: 900,
+  cursor: "pointer",
+  textAlign: "left",
+};
+
+const groupChevron: React.CSSProperties = {
+  fontSize: 14,
+  color: "#666",
+};
+
+const groupLinks: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  paddingLeft: 12,
 };
 
 const link: React.CSSProperties = {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/app/utils/supabase/client";
 import styles from "./top-client.module.css";
 
@@ -18,7 +17,13 @@ type Attendance = {
   work_date: string;
   start_time: string | null;
   end_time: string | null;
-  break_out_time: string | null;
+};
+
+type AttendanceBreak = {
+  id: string;
+  profile_id: string;
+  work_date: string;
+  break_out_time: string;
   break_in_time: string | null;
 };
 
@@ -57,14 +62,17 @@ type DisplayProject = {
 
 const STATUS_LABELS: Record<number, string> = {
   0: "保留",
-  1: "営業中",
-  2: "確定前",
-  3: "確定",
-  4: "進行中",
-  5: "完了",
-  6: "滞留",
-  7: "プリセールス(無償)",
-  8: "社内案件(無償)",
+  1: "営業中（高）",
+  2: "営業中（中）",
+  3: "営業中（低）",
+  4: "営業中（最終調整）",
+  5: "確定",
+  6: "進行中",
+  7: "完了",
+  8: "滞留",
+  9: "プリセールス(無償)",
+  10: "社内案件(無償)",
+  11: "失注",
 };
 
 function getTodayDateString(date: Date) {
@@ -124,6 +132,7 @@ export default function TopClient() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [attendance, setAttendance] = useState<Attendance | null>(null);
+  const [attendanceBreaks, setAttendanceBreaks] = useState<AttendanceBreak[]>([]);
   const [ongoingProjects, setOngoingProjects] = useState<DisplayProject[]>([]);
   const [unbilledProjects, setUnbilledProjects] = useState<DisplayProject[]>([]);
 
@@ -151,6 +160,7 @@ export default function TopClient() {
       const [
         { data: profileData, error: profileError },
         { data: attendanceData, error: attendanceError },
+        { data: attendanceBreakData, error: attendanceBreakError },
         { data: projectsData, error: projectsError },
         { data: projectMembersData, error: projectMembersError },
         { data: clientsData, error: clientsError },
@@ -162,10 +172,16 @@ export default function TopClient() {
           .maybeSingle(),
         supabase
           .from("attendance")
-          .select("id,profile_id,work_date,start_time,end_time,break_out_time,break_in_time")
+          .select("id,profile_id,work_date,start_time,end_time")
           .eq("profile_id", userId)
           .eq("work_date", today)
           .maybeSingle(),
+        supabase
+          .from("attendance_break")
+          .select("id,profile_id,work_date,break_out_time,break_in_time")
+          .eq("profile_id", userId)
+          .eq("work_date", today)
+          .order("break_out_time", { ascending: true }),
         supabase
           .from("project")
           .select("id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id")
@@ -176,18 +192,21 @@ export default function TopClient() {
 
       if (profileError) throw new Error(profileError.message);
       if (attendanceError) throw new Error(attendanceError.message);
+      if (attendanceBreakError) throw new Error(attendanceBreakError.message);
       if (projectsError) throw new Error(projectsError.message);
       if (projectMembersError) throw new Error(projectMembersError.message);
       if (clientsError) throw new Error(clientsError.message);
 
       const currentProfile = (profileData ?? null) as Profile | null;
       const todayAttendance = (attendanceData ?? null) as Attendance | null;
+      const todayAttendanceBreaks = (attendanceBreakData ?? []) as AttendanceBreak[];
       const projects = (projectsData ?? []) as Project[];
       const projectMembers = (projectMembersData ?? []) as ProjectMember[];
       const clients = (clientsData ?? []) as ClientRow[];
 
       setProfile(currentProfile);
       setAttendance(todayAttendance);
+      setAttendanceBreaks(todayAttendanceBreaks);
 
       const clientMap = new Map(clients.map((client) => [client.id, client.name]));
       const memberProjectIds = new Set(
@@ -207,7 +226,7 @@ export default function TopClient() {
           invoice: project.invoice,
         }));
 
-      setOngoingProjects(assignedProjects.filter((project) => project.status === 4));
+      setOngoingProjects(assignedProjects.filter((project) => project.status === 6));
       setUnbilledProjects(assignedProjects.filter((project) => isBlank(project.invoice)));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -220,9 +239,22 @@ export default function TopClient() {
     load();
   }, [load]);
 
-  const upsertAttendanceTime = async (
-    field: "start_time" | "end_time" | "break_out_time" | "break_in_time"
-  ) => {
+  const hasOpenBreak = useMemo(
+    () => attendanceBreaks.some((row) => row.break_out_time && !row.break_in_time),
+    [attendanceBreaks]
+  );
+
+  const breakOutHistoryText = useMemo(() => {
+    if (attendanceBreaks.length === 0) return "--:--:--";
+    return attendanceBreaks.map((row) => formatTime(row.break_out_time)).join(" / ");
+  }, [attendanceBreaks]);
+
+  const breakInHistoryText = useMemo(() => {
+    if (attendanceBreaks.length === 0) return "--:--:--";
+    return attendanceBreaks.map((row) => formatTime(row.break_in_time)).join(" / ");
+  }, [attendanceBreaks]);
+
+  const saveAttendanceField = async (field: "start_time" | "end_time") => {
     setSaving(true);
     setMessage("");
 
@@ -236,16 +268,125 @@ export default function TopClient() {
       const today = getTodayDateString(new Date());
       const nowText = formatNow(new Date());
 
-      const payload = {
+      if (field === "start_time") {
+        if (attendance?.start_time) {
+          throw new Error("本日はすでに出勤打刻済みです。");
+        }
+      }
+
+      if (field === "end_time") {
+        if (!attendance?.start_time) {
+          throw new Error("先に出勤打刻を行ってください。");
+        }
+        if (attendance.end_time) {
+          throw new Error("本日はすでに退勤打刻済みです。");
+        }
+        if (hasOpenBreak) {
+          throw new Error("外出中です。再入してから退勤してください。");
+        }
+      }
+
+      if (attendance?.id) {
+        const { error } = await supabase
+          .from("attendance")
+          .update({
+            [field]: nowText,
+            updated_by: userId,
+          })
+          .eq("id", attendance.id);
+
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase.from("attendance").insert({
+          profile_id: userId,
+          work_date: today,
+          [field]: nowText,
+          updated_by: userId,
+        });
+
+        if (error) throw new Error(error.message);
+      }
+
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addBreakOut = async () => {
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw new Error(authError.message);
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("ログインユーザーを取得できません。");
+
+      const today = getTodayDateString(new Date());
+      const nowText = formatNow(new Date());
+
+      if (!attendance?.start_time) {
+        throw new Error("先に出勤打刻を行ってください。");
+      }
+      if (attendance.end_time) {
+        throw new Error("退勤後は途中退出できません。");
+      }
+      if (hasOpenBreak) {
+        throw new Error("未再入の途中退出があります。先に再入してください。");
+      }
+
+      const { error } = await supabase.from("attendance_break").insert({
         profile_id: userId,
         work_date: today,
-        [field]: nowText,
+        break_out_time: nowText,
         updated_by: userId,
-      };
+      });
+
+      if (error) throw new Error(error.message);
+
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addBreakIn = async () => {
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw new Error(authError.message);
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("ログインユーザーを取得できません。");
+
+      const nowText = formatNow(new Date());
+      const openBreak = [...attendanceBreaks].reverse().find((row) => !row.break_in_time);
+
+      if (!attendance?.start_time) {
+        throw new Error("先に出勤打刻を行ってください。");
+      }
+      if (attendance.end_time) {
+        throw new Error("退勤後は再入できません。");
+      }
+      if (!openBreak) {
+        throw new Error("再入対象の途中退出がありません。");
+      }
 
       const { error } = await supabase
-        .from("attendance")
-        .upsert(payload, { onConflict: "profile_id,work_date" });
+        .from("attendance_break")
+        .update({
+          break_in_time: nowText,
+          updated_by: userId,
+        })
+        .eq("id", openBreak.id);
 
       if (error) throw new Error(error.message);
 
@@ -260,9 +401,14 @@ export default function TopClient() {
   const attendanceStatusText = useMemo(() => {
     if (!attendance?.start_time) return "未出勤";
     if (attendance.end_time) return "退勤済み";
-    if (attendance.break_out_time && !attendance.break_in_time) return "外出中";
+    if (hasOpenBreak) return "外出中";
     return `出勤中：${formatTime(attendance.start_time)}`;
-  }, [attendance]);
+  }, [attendance, hasOpenBreak]);
+
+  const canStart = !saving && !attendance?.start_time;
+  const canEnd = !saving && !!attendance?.start_time && !attendance?.end_time && !hasOpenBreak;
+  const canBreakOut = !saving && !!attendance?.start_time && !attendance?.end_time && !hasOpenBreak;
+  const canBreakIn = !saving && !!attendance?.start_time && !attendance?.end_time && hasOpenBreak;
 
   return (
     <main className={styles.page}>
@@ -274,9 +420,6 @@ export default function TopClient() {
             <h2 className={styles.sectionTitle}>打刻・勤怠ステータス</h2>
             {profile && <p className={styles.userText}>{fullName(profile)}</p>}
           </div>
-          <Link href="/report" className={styles.sectionLink}>
-            勤怠管理画面へ
-          </Link>
         </div>
 
         <div className={styles.attendanceCard}>
@@ -296,12 +439,12 @@ export default function TopClient() {
               <span className={styles.timeValue}>{formatTime(attendance?.end_time ?? null)}</span>
             </div>
             <div className={styles.timeRow}>
-              <span className={styles.timeLabel}>再入時刻</span>
-              <span className={styles.timeValue}>{formatTime(attendance?.break_in_time ?? null)}</span>
+              <span className={styles.timeLabel}>退出履歴</span>
+              <span className={styles.timeValue}>{breakOutHistoryText}</span>
             </div>
             <div className={styles.timeRow}>
-              <span className={styles.timeLabel}>退出時刻</span>
-              <span className={styles.timeValue}>{formatTime(attendance?.break_out_time ?? null)}</span>
+              <span className={styles.timeLabel}>再入履歴</span>
+              <span className={styles.timeValue}>{breakInHistoryText}</span>
             </div>
           </div>
 
@@ -309,32 +452,32 @@ export default function TopClient() {
             <button
               type="button"
               className={styles.btnAttendance}
-              disabled={saving}
-              onClick={() => upsertAttendanceTime("start_time")}
+              disabled={!canStart}
+              onClick={() => saveAttendanceField("start_time")}
             >
               出勤
             </button>
             <button
               type="button"
               className={styles.btnLeave}
-              disabled={saving}
-              onClick={() => upsertAttendanceTime("end_time")}
+              disabled={!canEnd}
+              onClick={() => saveAttendanceField("end_time")}
             >
               退勤
             </button>
             <button
               type="button"
               className={styles.btnBreakOut}
-              disabled={saving}
-              onClick={() => upsertAttendanceTime("break_out_time")}
+              disabled={!canBreakOut}
+              onClick={addBreakOut}
             >
               途中退出
             </button>
             <button
               type="button"
               className={styles.btnBreakIn}
-              disabled={saving}
-              onClick={() => upsertAttendanceTime("break_in_time")}
+              disabled={!canBreakIn}
+              onClick={addBreakIn}
             >
               再入
             </button>

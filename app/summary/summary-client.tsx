@@ -714,7 +714,6 @@ export default function SummaryClient() {
     <main className={styles.page}>
       <div className={styles.topRow}>
         <h1 className={styles.pageTitle}>サマリー</h1>
-        <Link href="/summary/sales">営業サマリーへ</Link>
         <div className={styles.controls}>
           <div className={styles.selectorWrap}>
             <label className={styles.controlLabel}>職種</label>

@@ -65,14 +65,6 @@ export default function LoginClient() {
 
       <section className={styles.centerWrap}>
         <div className={styles.titleWrap}>
-          <Image
-            src="/image/KINTSURU_title.png"
-            alt="KINTSURU"
-            width={340}
-            height={74}
-            className={styles.titleImage}
-            priority
-          />
           <p className={styles.subText}>今日も一日がんばりましょう</p>
         </div>
 
