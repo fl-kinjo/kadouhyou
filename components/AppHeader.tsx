@@ -13,7 +13,6 @@ const MENU_GROUPS = [
     items: [
       { href: "/attendance", label: "勤怠入力" },
       { href: "/attendance-management", label: "勤怠管理" },
-      { href: "/leave-request", label: "休暇申請" },
       { href: "/report", label: "業務報告" },
     ],
   },
@@ -21,6 +20,7 @@ const MENU_GROUPS = [
     key: "request",
     title: "申請系",
     items: [
+      { href: "/leave-request", label: "休暇申請" },
       { href: "/expenses", label: "経費申請" },
       { href: "/expenses-management", label: "経費管理" },
     ],
@@ -93,17 +93,6 @@ export default function AppHeader() {
         <button onClick={() => setOpen(true)} style={hamburger} type="button">
           ☰
         </button>
-
-        <Link href="/top" style={logoLink} onClick={closeDrawer}>
-          <Image
-            src="/image/header-logo.png"
-            alt="KINTSURU"
-            width={200}
-            height={60}
-            priority
-            style={logoImage}
-          />
-        </Link>
       </header>
 
       {open && <div style={overlay} onClick={closeDrawer} />}

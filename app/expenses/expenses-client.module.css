@@ -22,108 +22,251 @@
 
 .tabBar {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 8px;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 4px solid #f3cad8;
 }
 
 .tabButton {
-  min-width: 140px;
-  height: 40px;
-  border: 1px solid #ccc;
-  border-radius: 999px;
-  background: #fff;
+  min-width: 96px;
+  height: 42px;
+  border: 1px solid #cfcfcf;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: #d5d5d5;
   color: #333;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  margin-right: 8px;
 }
 
 .tabButtonActive {
-  background: #d91f00;
-  border-color: #d91f00;
-  color: #fff;
+  background: #f3cad8;
+  color: #111;
 }
 
-.card {
-  border: 1px solid #ddd;
+.sectionCard {
+  border: 1px solid #d9d9d9;
   border-radius: 10px;
   background: #fff;
   padding: 18px;
+  margin-bottom: 18px;
 }
 
-.loadingText {
-  color: #666;
-}
-
-.gridRow {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 14px;
-  padding: 12px 0;
-  align-items: start;
-}
-
-.gridLabel {
-  font-weight: 700;
-  padding-top: 10px;
-}
-
-.projectSelectArea {
-  display: grid;
-  gap: 10px;
-}
-
-.input,
-.select,
-.inputSmall,
-.textarea {
-  width: 100%;
-  border: 1px solid #bbb;
-  border-radius: 8px;
-  box-sizing: border-box;
-  background: #fff;
-}
-
-.input,
-.select,
-.inputSmall {
-  height: 42px;
-  padding: 0 12px;
-}
-
-.inputSmall {
-  max-width: 240px;
-}
-
-.textarea {
-  padding: 12px;
-  resize: vertical;
-}
-
-.checkRow {
-  display: inline-flex;
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  min-height: 42px;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 900;
+  color: #111;
+}
+
+.expenseTypeTabs {
+  display: flex;
+  width: 240px;
+  max-width: 100%;
+  border: 1px solid #bfbfbf;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.expenseTypeButton {
+  flex: 1;
+  height: 40px;
+  border: none;
+  background: #fff;
+  color: #444;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.helpText {
+.expenseTypeButton + .expenseTypeButton {
+  border-left: 1px solid #bfbfbf;
+}
+
+.expenseTypeButtonActive {
+  background: #f3cad8;
+  color: #d44d72;
+}
+
+.selectionArea {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+}
+
+.fieldLabel {
   font-size: 13px;
+  font-weight: 700;
+  color: #444;
+}
+
+.input,
+.select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  box-sizing: border-box;
+  background: #fff;
+  padding: 0 12px;
+}
+
+.helpText {
+  font-size: 12px;
   color: #666;
 }
 
-.buttonRow {
-  margin-top: 18px;
+.addDetailButton {
+  min-width: 112px;
+  height: 34px;
+  border: 1px solid #ef9db0;
+  border-radius: 8px;
+  background: #f7d9e2;
+  color: #d44d72;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.detailList {
+  display: grid;
+  gap: 12px;
+}
+
+.detailCard {
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+}
+
+.detailHeader {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.detailTitle {
+  font-size: 13px;
+  font-weight: 800;
+  color: #444;
+}
+
+.detailHeaderButtons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detailSubButton {
+  min-width: 72px;
+  height: 28px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.detailCloseButton {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #333;
+}
+
+.detailGridTop {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.detailGridBottom {
+  display: grid;
+  grid-template-columns: 1.4fr 220px;
+  gap: 14px;
+  align-items: start;
+}
+
+.detailField,
+.detailFieldWide,
+.detailFieldReceipt {
+  display: grid;
+  gap: 6px;
+}
+
+.uploadButton {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  width: 140px;
+  height: 42px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.receiptFileName {
+  font-size: 12px;
+  color: #666;
+  word-break: break-all;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.totalLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+}
+
+.totalValue {
+  font-size: 28px;
+  font-weight: 900;
+  color: #111;
+}
+
+.submitRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .submitButton {
   min-width: 160px;
-  height: 44px;
+  height: 40px;
   border: none;
   border-radius: 999px;
   background: #d91f00;
@@ -136,6 +279,10 @@
 .submitButton:disabled {
   opacity: 0.7;
   cursor: default;
+}
+
+.loadingText {
+  color: #666;
 }
 
 .listSection {
@@ -163,7 +310,7 @@
 
 .table {
   width: 100%;
-  min-width: 920px;
+  min-width: 1120px;
   border-collapse: collapse;
 }
 
@@ -193,6 +340,22 @@
   word-break: break-word;
 }
 
+.receiptLinkButton {
+  min-width: 110px;
+  height: 32px;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.receiptLinkButton:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
 @media (max-width: 760px) {
   .page {
     padding: 16px;
@@ -202,20 +365,24 @@
     font-size: 26px;
   }
 
-  .tabBar {
-    flex-wrap: wrap;
-  }
-
-  .gridRow {
+  .detailGridTop {
     grid-template-columns: 1fr;
-    gap: 8px;
   }
 
-  .gridLabel {
-    padding-top: 0;
+  .detailGridBottom {
+    grid-template-columns: 1fr;
   }
 
-  .inputSmall {
-    max-width: 100%;
+  .detailHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .submitRow {
+    justify-content: center;
+  }
+
+  .submitButton {
+    width: 100%;
   }
 }

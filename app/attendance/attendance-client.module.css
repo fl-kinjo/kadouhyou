@@ -101,7 +101,7 @@
 
 .table {
   width: 100%;
-  min-width: 920px;
+  min-width: 980px;
   border-collapse: collapse;
 }
 
@@ -353,4 +353,46 @@
   .modalSaveButton {
     width: 100%;
   }
+}
+
+.editButton:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.modalSelect {
+  appearance: auto;
+}
+
+.modalTextarea {
+  width: 100%;
+  border: 1px solid #c5c5c5;
+  border-radius: 6px;
+  padding: 12px;
+  box-sizing: border-box;
+  background: #fff;
+  resize: vertical;
+  font: inherit;
+}
+
+.completeModalCard {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 36px 24px 24px;
+  box-sizing: border-box;
+}
+
+.completeModalCloseButton {
+  min-width: 92px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: #f0f0f0;
+  color: #333;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }

@@ -8,6 +8,8 @@ type ExpenseRow = {
   id: string;
   profile_id: string;
   project_id: string | null;
+  team_id: string | null;
+  expense_type: number | null;
   category: number | null;
   expense_name: string | null;
   amount: number | null;
@@ -18,6 +20,8 @@ type ExpenseRow = {
   request_group_id: string;
   created_at: string;
   updated_by: string | null;
+  receipt_file_path: string | null;
+  receipt_file_name: string | null;
 };
 
 type ProfileRow = {
@@ -42,8 +46,14 @@ type ProjectRow = {
   name: string;
 };
 
+type TeamRow = {
+  id: string;
+  name: string;
+  department_code: string | null;
+};
+
 type MainTab = "employee" | "request";
-type CategoryFilter = "all" | "direct" | "indirect";
+type ExpenseTypeFilter = "all" | "direct" | "indirect";
 
 type GroupedExpenseRequest = {
   requestGroupId: string;
@@ -52,8 +62,8 @@ type GroupedExpenseRequest = {
   createdAt: string;
   applicationStatus: number;
   totalAmount: number;
-  projectName: string;
-  category: number | null;
+  targetLabel: string;
+  expenseType: number | null;
   items: {
     id: string;
     expenseDate: string;
@@ -61,6 +71,8 @@ type GroupedExpenseRequest = {
     amount: number;
     purpose: string;
     invoice: boolean;
+    receiptFilePath: string | null;
+    receiptFileName: string | null;
   }[];
 };
 
@@ -121,10 +133,22 @@ function getStatusClass(status: number) {
   }
 }
 
-function matchesCategoryFilter(category: number | null, filter: CategoryFilter) {
+function matchesExpenseTypeFilter(expenseType: number | null, filter: ExpenseTypeFilter) {
   if (filter === "all") return true;
-  if (filter === "direct") return category === 0;
-  return category === 1;
+  if (filter === "direct") return expenseType === 0;
+  return expenseType === 1;
+}
+
+function formatExpenseTypeLabel(expenseType: number | null) {
+  return expenseType === 1 ? "間接経費" : "直接経費";
+}
+
+function formatTeamLabel(team: TeamRow | null | undefined) {
+  if (!team) return "-";
+  if (team.department_code) {
+    return `${team.department_code} / ${team.name}`;
+  }
+  return team.name;
 }
 
 export default function ExpensesManagementClient() {
@@ -132,10 +156,11 @@ export default function ExpensesManagementClient() {
 
   const [loading, setLoading] = useState(true);
   const [savingGroupId, setSavingGroupId] = useState("");
+  const [downloadingReceiptPath, setDownloadingReceiptPath] = useState("");
   const [message, setMessage] = useState("");
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
   const [activeMainTab, setActiveMainTab] = useState<MainTab>("employee");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [expenseTypeFilter, setExpenseTypeFilter] = useState<ExpenseTypeFilter>("all");
   const [selectedProfileId, setSelectedProfileId] = useState("");
 
   const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([]);
@@ -143,6 +168,7 @@ export default function ExpensesManagementClient() {
   const [profileJobs, setProfileJobs] = useState<ProfileJobRow[]>([]);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,11 +187,12 @@ export default function ExpensesManagementClient() {
         { data: profileJobData, error: profileJobError },
         { data: jobData, error: jobError },
         { data: projectData, error: projectError },
+        { data: teamData, error: teamError },
       ] = await Promise.all([
         supabase
           .from("project_actual_cost")
           .select(
-            "id,profile_id,project_id,category,expense_name,amount,expense_date,invoice,purpose,application_status,request_group_id,created_at,updated_by"
+            "id,profile_id,project_id,team_id,expense_type,category,expense_name,amount,expense_date,invoice,purpose,application_status,request_group_id,created_at,updated_by,receipt_file_path,receipt_file_name"
           )
           .not("profile_id", "is", null)
           .not("request_group_id", "is", null)
@@ -179,6 +206,7 @@ export default function ExpensesManagementClient() {
         supabase.from("profile_job").select("profile_id,job_id"),
         supabase.from("job").select("id,name").order("created_at", { ascending: true }),
         supabase.from("project").select("id,name").order("created_at", { ascending: true }),
+        supabase.from("team").select("id,name,department_code").order("name", { ascending: true }),
       ]);
 
       if (expenseError) throw new Error(expenseError.message);
@@ -186,12 +214,14 @@ export default function ExpensesManagementClient() {
       if (profileJobError) throw new Error(profileJobError.message);
       if (jobError) throw new Error(jobError.message);
       if (projectError) throw new Error(projectError.message);
+      if (teamError) throw new Error(teamError.message);
 
       setExpenseRows((expenseData ?? []) as ExpenseRow[]);
       setProfiles((profileData ?? []) as ProfileRow[]);
       setProfileJobs((profileJobData ?? []) as ProfileJobRow[]);
       setJobs((jobData ?? []) as JobRow[]);
       setProjects((projectData ?? []) as ProjectRow[]);
+      setTeams((teamData ?? []) as TeamRow[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -206,13 +236,20 @@ export default function ExpensesManagementClient() {
   const groupedRequests = useMemo<GroupedExpenseRequest[]>(() => {
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
     const projectMap = new Map(projects.map((project) => [project.id, project.name]));
+    const teamMap = new Map(teams.map((team) => [team.id, team]));
     const map = new Map<string, GroupedExpenseRequest>();
 
     for (const row of expenseRows) {
       const current = map.get(row.request_group_id);
       const amount = Number(row.amount ?? 0);
       const invoice = row.invoice === true || row.invoice === 1;
-      const projectName = row.project_id ? projectMap.get(row.project_id) ?? "-" : "-";
+
+      const targetLabel =
+        row.expense_type === 1
+          ? formatTeamLabel(row.team_id ? teamMap.get(row.team_id) : null)
+          : row.project_id
+            ? projectMap.get(row.project_id) ?? "-"
+            : "-";
 
       if (!current) {
         map.set(row.request_group_id, {
@@ -222,8 +259,8 @@ export default function ExpensesManagementClient() {
           createdAt: row.created_at,
           applicationStatus: row.application_status,
           totalAmount: amount,
-          projectName,
-          category: row.category ?? null,
+          targetLabel,
+          expenseType: row.expense_type ?? 0,
           items: [
             {
               id: row.id,
@@ -232,6 +269,8 @@ export default function ExpensesManagementClient() {
               amount,
               purpose: row.purpose ?? "",
               invoice,
+              receiptFilePath: row.receipt_file_path,
+              receiptFileName: row.receipt_file_name,
             },
           ],
         });
@@ -244,14 +283,16 @@ export default function ExpensesManagementClient() {
           amount,
           purpose: row.purpose ?? "",
           invoice,
+          receiptFilePath: row.receipt_file_path,
+          receiptFileName: row.receipt_file_name,
         });
 
-        if (current.projectName !== projectName) {
-          current.projectName = "複数案件";
+        if (current.targetLabel !== targetLabel) {
+          current.targetLabel = "複数";
         }
 
-        if (current.category !== (row.category ?? null)) {
-          current.category = null;
+        if (current.expenseType !== (row.expense_type ?? 0)) {
+          current.expenseType = null;
         }
       }
     }
@@ -263,7 +304,7 @@ export default function ExpensesManagementClient() {
 
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt, "ja"));
     return result;
-  }, [expenseRows, profiles, projects]);
+  }, [expenseRows, profiles, projects, teams]);
 
   const employeeSummaries = useMemo<EmployeeSummaryRow[]>(() => {
     const jobMap = new Map(jobs.map((job) => [job.id, job.name]));
@@ -320,8 +361,10 @@ export default function ExpensesManagementClient() {
   }, [groupedRequests, selectedProfileId]);
 
   const filteredAllRequests = useMemo(() => {
-    return groupedRequests.filter((group) => matchesCategoryFilter(group.category, categoryFilter));
-  }, [categoryFilter, groupedRequests]);
+    return groupedRequests.filter((group) =>
+      matchesExpenseTypeFilter(group.expenseType, expenseTypeFilter)
+    );
+  }, [expenseTypeFilter, groupedRequests]);
 
   const updateApplicationStatus = async (requestGroupId: string, applicationStatus: 1 | 2 | 3) => {
     setSavingGroupId(requestGroupId);
@@ -352,6 +395,40 @@ export default function ExpensesManagementClient() {
     }
   };
 
+  const downloadReceipt = async (filePath: string, fileName?: string | null) => {
+    setMessage("");
+    setDownloadingReceiptPath(filePath);
+
+    try {
+      const { data, error } = await supabase.storage
+        .from("expense-receipts")
+        .createSignedUrl(filePath, 60);
+
+      if (error) throw new Error(error.message);
+
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) {
+        throw new Error("領収書ファイルの取得に失敗しました。");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName || filePath.split("/").pop() || "receipt";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDownloadingReceiptPath("");
+    }
+  };
+
   const renderRequestCards = (requestList: GroupedExpenseRequest[]) => {
     if (loading) {
       return <div className={styles.emptyState}>読み込み中...</div>;
@@ -370,7 +447,8 @@ export default function ExpensesManagementClient() {
                 <div className={styles.requestDate}>{formatDateJP(group.createdAt)}</div>
                 <div className={styles.requestAmount}>{formatCurrency(group.totalAmount)}</div>
                 <div className={styles.requestMeta}>申請者：{group.applicantName || "-"}</div>
-                <div className={styles.requestMeta}>案件名：{group.projectName || "-"}</div>
+                <div className={styles.requestMeta}>申請種別：{formatExpenseTypeLabel(group.expenseType)}</div>
+                <div className={styles.requestMeta}>案件 / 部門：{group.targetLabel || "-"}</div>
               </div>
 
               <div className={`${styles.statusBadge} ${getStatusClass(group.applicationStatus)}`}>
@@ -385,8 +463,23 @@ export default function ExpensesManagementClient() {
                   <div className={styles.requestItemName}>{item.expenseName}</div>
                   <div className={styles.requestItemAmount}>{formatCurrency(item.amount)}</div>
                   <div className={styles.requestItemPurpose}>{item.purpose || "-"}</div>
-                  <div className={styles.requestItemInvoice}>
-                    {item.invoice ? <span className={styles.invoiceBadge}>インボイス有</span> : ""}
+                  <div className={styles.requestItemReceipt}>
+                    {item.receiptFilePath ? (
+                      <button
+                        type="button"
+                        className={styles.receiptDownloadButton}
+                        onClick={() => downloadReceipt(item.receiptFilePath!, item.receiptFileName)}
+                        disabled={downloadingReceiptPath === item.receiptFilePath}
+                      >
+                        {downloadingReceiptPath === item.receiptFilePath
+                          ? "保存中..."
+                          : "領収書を保存"}
+                      </button>
+                    ) : item.invoice ? (
+                      <span className={styles.invoiceBadge}>領収書あり</span>
+                    ) : (
+                      "-"
+                    )}
                   </div>
                 </div>
               ))}
@@ -566,22 +659,22 @@ export default function ExpensesManagementClient() {
           <div className={styles.subTabBar}>
             <button
               type="button"
-              className={`${styles.subTabButton} ${categoryFilter === "all" ? styles.subTabButtonActive : ""}`}
-              onClick={() => setCategoryFilter("all")}
+              className={`${styles.subTabButton} ${expenseTypeFilter === "all" ? styles.subTabButtonActive : ""}`}
+              onClick={() => setExpenseTypeFilter("all")}
             >
               すべて
             </button>
             <button
               type="button"
-              className={`${styles.subTabButton} ${categoryFilter === "direct" ? styles.subTabButtonActive : ""}`}
-              onClick={() => setCategoryFilter("direct")}
+              className={`${styles.subTabButton} ${expenseTypeFilter === "direct" ? styles.subTabButtonActive : ""}`}
+              onClick={() => setExpenseTypeFilter("direct")}
             >
               直接経費
             </button>
             <button
               type="button"
-              className={`${styles.subTabButton} ${categoryFilter === "indirect" ? styles.subTabButtonActive : ""}`}
-              onClick={() => setCategoryFilter("indirect")}
+              className={`${styles.subTabButton} ${expenseTypeFilter === "indirect" ? styles.subTabButtonActive : ""}`}
+              onClick={() => setExpenseTypeFilter("indirect")}
             >
               間接経費
             </button>

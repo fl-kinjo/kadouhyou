@@ -64,23 +64,21 @@
   margin-bottom: 14px;
 }
 
-.subTabButtonDisabled,
-.subTabButtonActive {
+.subTabButton {
   min-width: 120px;
   height: 36px;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid #e2e2e2;
+  border-radius: 999px;
+  background: #fff;
+  color: #555;
   font-weight: 700;
-}
-
-.subTabButtonDisabled {
-  background: #f3cad8;
-  color: #d07c96;
+  cursor: pointer;
 }
 
 .subTabButtonActive {
-  background: #f5f5f5;
-  color: #777;
+  border-color: #ef9db0;
+  background: #f7d9e2;
+  color: #d44d72;
 }
 
 .message {
@@ -107,7 +105,7 @@
 }
 
 .requestCard {
-  max-width: 620px;
+  max-width: 760px;
   border: 1px solid #d9d9d9;
   border-radius: 10px;
   background: #fff;
@@ -172,6 +170,33 @@
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
+}
+
+.correctionRows {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.correctionRow {
+  display: grid;
+  grid-template-columns: 72px repeat(4, 1fr);
+  gap: 12px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  align-items: center;
+}
+
+.correctionRowLabel {
+  font-weight: 800;
+  color: #111;
+}
+
+.correctionRowValue {
+  color: #333;
+  white-space: nowrap;
 }
 
 .commentBlock {
@@ -282,17 +307,6 @@
   text-align: center;
 }
 
-.detailButton {
-  min-width: 48px;
-  height: 26px;
-  border: 1px solid #bbb;
-  background: #fff;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .detailButtonLink {
   display: inline-flex;
   align-items: center;
@@ -308,6 +322,13 @@
   color: inherit;
   text-decoration: none;
   box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+  .correctionRow {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
 }
 
 @media (max-width: 640px) {

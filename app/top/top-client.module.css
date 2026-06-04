@@ -161,6 +161,116 @@
   cursor: default;
 }
 
+.alertToggle {
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.alertToggleLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.alertHamburger {
+  font-size: 18px;
+  line-height: 1;
+  color: #444;
+}
+
+.alertToggleTitle {
+  font-size: 18px;
+  font-weight: 900;
+  color: #111;
+}
+
+.alertCountBadge {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #f3cad8;
+  color: #8f2542;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  box-sizing: border-box;
+}
+
+.alertChevron {
+  font-size: 16px;
+  color: #555;
+}
+
+.alertPanel {
+  margin-top: 12px;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px;
+}
+
+.alertEmpty {
+  color: #666;
+  font-size: 14px;
+}
+
+.alertGroupList {
+  display: grid;
+  gap: 16px;
+}
+
+.alertGroupCard {
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fafafa;
+  padding: 16px;
+}
+
+.alertGroupTitle {
+  font-size: 18px;
+  font-weight: 900;
+  margin-bottom: 10px;
+  color: #111;
+}
+
+.alertItemList {
+  display: grid;
+  gap: 10px;
+}
+
+.alertItem {
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #ededed;
+  padding: 12px 14px;
+}
+
+.alertItemTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111;
+  margin-bottom: 4px;
+}
+
+.alertItemDescription {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+}
+
 .tableFrame {
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -226,5 +336,13 @@
 
   .table {
     min-width: 760px;
+  }
+
+  .alertToggleTitle {
+    font-size: 16px;
+  }
+
+  .alertGroupTitle {
+    font-size: 16px;
   }
 }

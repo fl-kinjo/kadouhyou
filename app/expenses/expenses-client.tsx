@@ -9,9 +9,17 @@ type ProjectRow = {
   name: string;
 };
 
+type TeamRow = {
+  id: string;
+  name: string;
+  department_code: string | null;
+};
+
 type ExpenseRow = {
   id: string;
   project_id: string | null;
+  team_id: string | null;
+  expense_type: number | null;
   expense_name: string | null;
   target_year_month: string | null;
   amount: number | null;
@@ -20,10 +28,45 @@ type ExpenseRow = {
   purpose: string | null;
   updated_at: string | null;
   updated_by: string | null;
-  category: number;
+  profile_id: string | null;
+  category: number | null;
+  application_status: number | null;
+  request_group_id: string | null;
+  receipt_file_path: string | null;
+  receipt_file_name: string | null;
+  receipt_mime_type: string | null;
+  receipt_size_bytes: number | null;
 };
 
 type TabType = "form" | "list";
+type ExpenseType = "direct" | "indirect";
+
+type DetailFormRow = {
+  id: string;
+  expenseDate: string;
+  category: string;
+  amount: string;
+  purpose: string;
+  invoice: boolean;
+  receiptFileName: string;
+  receiptFile: File | null;
+};
+
+const CATEGORY_OPTIONS = [
+  { value: "0", label: "交通費" },
+  { value: "1", label: "飲食費" },
+  { value: "2", label: "宿泊費" },
+  { value: "3", label: "会議費" },
+  { value: "4", label: "消耗品費" },
+  { value: "5", label: "その他" },
+] as const;
+
+const APPLICATION_STATUS_LABELS: Record<number, string> = {
+  0: "承認待ち",
+  1: "承認済み",
+  2: "却下",
+  3: "取消",
+};
 
 function toTargetYearMonth(expenseDate: string) {
   return expenseDate ? `${expenseDate.slice(0, 7)}-01` : null;
@@ -47,25 +90,62 @@ function formatCurrency(value: number | null) {
   return `¥${value.toLocaleString("ja-JP")}`;
 }
 
+function formatExpenseTypeLabel(value: number | null) {
+  return value === 1 ? "間接経費" : "直接経費";
+}
+
+function formatApplicationStatus(value: number | null) {
+  if (value == null) return "-";
+  return APPLICATION_STATUS_LABELS[value] ?? String(value);
+}
+
+function getCategoryLabel(value: number | null) {
+  const option = CATEGORY_OPTIONS.find((item) => Number(item.value) === value);
+  return option?.label ?? "-";
+}
+
+function createEmptyDetail(): DetailFormRow {
+  return {
+    id: crypto.randomUUID(),
+    expenseDate: "",
+    category: "",
+    amount: "",
+    purpose: "",
+    invoice: false,
+    receiptFileName: "",
+    receiptFile: null,
+  };
+}
+
+function formatTeamLabel(team: TeamRow | null) {
+  if (!team) return "-";
+  if (team.department_code) {
+    return `${team.department_code} / ${team.name}`;
+  }
+  return team.name;
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^\w.\-]/g, "_");
+}
+
 export default function ExpensesClient() {
   const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [downloadingReceiptPath, setDownloadingReceiptPath] = useState("");
   const [message, setMessage] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("form");
+  const [expenseType, setExpenseType] = useState<ExpenseType>("direct");
 
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
 
-  const [projectKeyword, setProjectKeyword] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
-
-  const [expenseDate, setExpenseDate] = useState("");
-  const [expenseName, setExpenseName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [invoice, setInvoice] = useState(false);
-  const [purpose, setPurpose] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [details, setDetails] = useState<DetailFormRow[]>([createEmptyDetail()]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,24 +158,29 @@ export default function ExpensesClient() {
       const userId = authData.user?.id;
       if (!userId) throw new Error("ログインユーザーを取得できません。");
 
-      const [{ data: projectData, error: projectError }, { data: expenseData, error: expenseError }] =
-        await Promise.all([
-          supabase.from("project").select("id,name").order("name", { ascending: true }),
-          supabase
-            .from("project_actual_cost")
-            .select(
-              "id,project_id,expense_name,target_year_month,amount,expense_date,invoice,purpose,updated_at,updated_by,category"
-            )
-            .eq("category", 0)
-            .eq("updated_by", userId)
-            .order("expense_date", { ascending: false })
-            .order("updated_at", { ascending: false }),
-        ]);
+      const [
+        { data: projectData, error: projectError },
+        { data: teamData, error: teamError },
+        { data: expenseData, error: expenseError },
+      ] = await Promise.all([
+        supabase.from("project").select("id,name").order("name", { ascending: true }),
+        supabase.from("team").select("id,name,department_code").order("name", { ascending: true }),
+        supabase
+          .from("project_actual_cost")
+          .select(
+            "id,project_id,team_id,expense_type,expense_name,target_year_month,amount,expense_date,invoice,purpose,updated_at,updated_by,profile_id,category,application_status,request_group_id,receipt_file_path,receipt_file_name,receipt_mime_type,receipt_size_bytes"
+          )
+          .eq("profile_id", userId)
+          .order("expense_date", { ascending: false })
+          .order("updated_at", { ascending: false }),
+      ]);
 
       if (projectError) throw new Error(projectError.message);
+      if (teamError) throw new Error(teamError.message);
       if (expenseError) throw new Error(expenseError.message);
 
       setProjects((projectData ?? []) as ProjectRow[]);
+      setTeams((teamData ?? []) as TeamRow[]);
       setExpenses((expenseData ?? []) as ExpenseRow[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -108,43 +193,133 @@ export default function ExpensesClient() {
     load();
   }, [load]);
 
-  const filteredProjects = useMemo(() => {
-    const keyword = projectKeyword.trim().toLowerCase();
-    if (!keyword) return projects;
-    return projects.filter((project) => project.name.toLowerCase().includes(keyword));
-  }, [projectKeyword, projects]);
+  const projectMap = useMemo(() => {
+    return new Map(projects.map((project) => [project.id, project.name]));
+  }, [projects]);
+
+  const teamMap = useMemo(() => {
+    return new Map(teams.map((team) => [team.id, team]));
+  }, [teams]);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId]
   );
 
-  const projectMap = useMemo(() => {
-    return new Map(projects.map((project) => [project.id, project.name]));
-  }, [projects]);
+  const selectedTeam = useMemo(
+    () => teams.find((team) => team.id === selectedTeamId) ?? null,
+    [teams, selectedTeamId]
+  );
+
+  const totalAmount = useMemo(() => {
+    return details.reduce((sum, detail) => sum + (toNumberOrNull(detail.amount) ?? 0), 0);
+  }, [details]);
 
   const validate = () => {
-    if (!expenseDate) return "経費発生日を入力してください。";
-    if (!expenseName.trim()) return "経費名を入力してください。";
-
-    const amountNum = toNumberOrNull(amount);
-    if (amountNum == null || amountNum < 0) {
-      return "金額は0以上の数値で入力してください。";
+    if (expenseType === "direct" && !selectedProjectId) {
+      return "案件を選択してください。";
     }
 
-    if (!purpose.trim()) return "用途を入力してください。";
+    if (expenseType === "indirect" && !selectedTeamId) {
+      return "部門コードを選択してください。";
+    }
+
+    for (let i = 0; i < details.length; i += 1) {
+      const row = details[i];
+      const index = i + 1;
+
+      if (!row.expenseDate) return `明細${index}の日付を入力してください。`;
+      if (!row.category) return `明細${index}のカテゴリを選択してください。`;
+
+      const amountNum = toNumberOrNull(row.amount);
+      if (amountNum == null || amountNum < 0) {
+        return `明細${index}の金額は0以上の数値で入力してください。`;
+      }
+
+      if (!row.purpose.trim()) return `明細${index}の用途を入力してください。`;
+    }
 
     return null;
   };
 
   const resetForm = () => {
-    setProjectKeyword("");
+    setExpenseType("direct");
     setSelectedProjectId("");
-    setExpenseDate("");
-    setExpenseName("");
-    setAmount("");
-    setInvoice(false);
-    setPurpose("");
+    setSelectedTeamId("");
+    setDetails([createEmptyDetail()]);
+  };
+
+  const updateDetail = (detailId: string, patch: Partial<DetailFormRow>) => {
+    setDetails((current) =>
+      current.map((detail) => (detail.id === detailId ? { ...detail, ...patch } : detail))
+    );
+  };
+
+  const addDetail = () => {
+    setDetails((current) => [...current, createEmptyDetail()]);
+  };
+
+  const duplicateDetail = (detailId: string) => {
+    setDetails((current) => {
+      const target = current.find((detail) => detail.id === detailId);
+      if (!target) return current;
+
+      const duplicated: DetailFormRow = {
+        ...target,
+        id: crypto.randomUUID(),
+        invoice: false,
+        receiptFileName: "",
+        receiptFile: null,
+      };
+
+      const index = current.findIndex((detail) => detail.id === detailId);
+      const next = [...current];
+      next.splice(index + 1, 0, duplicated);
+      return next;
+    });
+  };
+
+  const removeDetail = (detailId: string) => {
+    setDetails((current) => {
+      if (current.length === 1) {
+        return [createEmptyDetail()];
+      }
+      return current.filter((detail) => detail.id !== detailId);
+    });
+  };
+
+  const downloadReceipt = async (filePath: string, fileName?: string | null) => {
+    setMessage("");
+    setDownloadingReceiptPath(filePath);
+
+    try {
+      const { data, error } = await supabase.storage
+        .from("expense-receipts")
+        .createSignedUrl(filePath, 60);
+
+      if (error) throw new Error(error.message);
+
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) {
+        throw new Error("領収書ファイルの取得に失敗しました。");
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName || filePath.split("/").pop() || "receipt";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDownloadingReceiptPath("");
+    }
   };
 
   const submit = async () => {
@@ -158,6 +333,8 @@ export default function ExpensesClient() {
 
     setSaving(true);
 
+    const uploadedPaths: string[] = [];
+
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
@@ -165,23 +342,62 @@ export default function ExpensesClient() {
       const userId = authData.user?.id;
       if (!userId) throw new Error("ログインユーザーを取得できません。");
 
-      const amountNum = toNumberOrNull(amount);
-      const targetYearMonth = toTargetYearMonth(expenseDate);
+      const requestGroupId = crypto.randomUUID();
 
-      const payload = {
-        project_id: selectedProjectId || null,
-        category: 0,
-        expense_name: expenseName.trim(),
-        partner_id: null,
-        target_year_month: targetYearMonth,
-        amount: amountNum,
-        expense_date: expenseDate,
-        invoice,
-        purpose: purpose.trim(),
-        updated_by: userId,
-      };
+      const payloads = await Promise.all(
+        details.map(async (detail, index) => {
+          const amountNum = toNumberOrNull(detail.amount);
+          const categoryOption = CATEGORY_OPTIONS.find((option) => option.value === detail.category);
 
-      const { error } = await supabase.from("project_actual_cost").insert(payload);
+          let receiptFilePath: string | null = null;
+          let receiptFileName: string | null = null;
+          let receiptMimeType: string | null = null;
+          let receiptSizeBytes: number | null = null;
+
+          if (detail.receiptFile) {
+            const safeFileName = sanitizeFileName(detail.receiptFile.name);
+            const storagePath = `${userId}/${requestGroupId}/detail_${index + 1}_${Date.now()}_${safeFileName}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from("expense-receipts")
+              .upload(storagePath, detail.receiptFile, {
+                upsert: false,
+              });
+
+            if (uploadError) throw new Error(uploadError.message);
+
+            uploadedPaths.push(storagePath);
+            receiptFilePath = storagePath;
+            receiptFileName = detail.receiptFile.name;
+            receiptMimeType = detail.receiptFile.type || null;
+            receiptSizeBytes = detail.receiptFile.size;
+          }
+
+          return {
+            project_id: expenseType === "direct" ? selectedProjectId || null : null,
+            team_id: expenseType === "indirect" ? selectedTeamId || null : null,
+            expense_type: expenseType === "direct" ? 0 : 1,
+            category: Number(detail.category),
+            expense_name: categoryOption?.label ?? "その他",
+            partner_id: null,
+            target_year_month: toTargetYearMonth(detail.expenseDate),
+            amount: amountNum,
+            expense_date: detail.expenseDate,
+            invoice: !!detail.receiptFile,
+            purpose: detail.purpose.trim(),
+            profile_id: userId,
+            updated_by: userId,
+            application_status: 0,
+            request_group_id: requestGroupId,
+            receipt_file_path: receiptFilePath,
+            receipt_file_name: receiptFileName,
+            receipt_mime_type: receiptMimeType,
+            receipt_size_bytes: receiptSizeBytes,
+          };
+        })
+      );
+
+      const { error } = await supabase.from("project_actual_cost").insert(payloads);
 
       if (error) throw new Error(error.message);
 
@@ -190,10 +406,26 @@ export default function ExpensesClient() {
       await load();
       setMessage("経費申請を登録しました。");
     } catch (error) {
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from("expense-receipts").remove(uploadedPaths);
+      }
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
+  };
+
+  const renderTargetLabel = (expense: ExpenseRow) => {
+    if (expense.expense_type === 1) {
+      const team = expense.team_id ? teamMap.get(expense.team_id) ?? null : null;
+      return formatTeamLabel(team);
+    }
+
+    if (expense.project_id) {
+      return projectMap.get(expense.project_id) ?? "-";
+    }
+
+    return "-";
   };
 
   return (
@@ -210,39 +442,57 @@ export default function ExpensesClient() {
           className={`${styles.tabButton} ${activeTab === "form" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("form")}
         >
-          経費申請
+          申請フォーム
         </button>
         <button
           type="button"
           className={`${styles.tabButton} ${activeTab === "list" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("list")}
         >
-          経費申請一覧
+          申請一覧
         </button>
       </div>
 
       {activeTab === "form" ? (
-        <div className={styles.card}>
-          {loading ? (
-            <p className={styles.loadingText}>読み込み中...</p>
-          ) : (
-            <>
-              <div className={styles.gridRow}>
-                <div className={styles.gridLabel}>プロジェクト検索</div>
-                <div className={styles.projectSelectArea}>
-                  <input
-                    value={projectKeyword}
-                    onChange={(event) => setProjectKeyword(event.target.value)}
-                    className={styles.input}
-                    placeholder="project.name で検索"
-                  />
+        <>
+          <section className={styles.sectionCard}>
+            <div className={styles.sectionTitle}>経費種別</div>
+
+            <div className={styles.expenseTypeTabs}>
+              <button
+                type="button"
+                className={`${styles.expenseTypeButton} ${
+                  expenseType === "direct" ? styles.expenseTypeButtonActive : ""
+                }`}
+                onClick={() => setExpenseType("direct")}
+              >
+                直接経費
+              </button>
+              <button
+                type="button"
+                className={`${styles.expenseTypeButton} ${
+                  expenseType === "indirect" ? styles.expenseTypeButtonActive : ""
+                }`}
+                onClick={() => setExpenseType("indirect")}
+              >
+                間接経費
+              </button>
+            </div>
+
+            <div className={styles.selectionArea}>
+              <div className={styles.fieldLabel}>
+                {expenseType === "direct" ? "案件を選択" : "部門を選択"}
+              </div>
+
+              {expenseType === "direct" ? (
+                <>
                   <select
                     value={selectedProjectId}
                     onChange={(event) => setSelectedProjectId(event.target.value)}
                     className={styles.select}
                   >
-                    <option value="">未選択</option>
-                    {filteredProjects.map((project) => (
+                    <option value="">- 案件を選択してください -</option>
+                    {projects.map((project) => (
                       <option key={project.id} value={project.id}>
                         {project.name}
                       </option>
@@ -251,76 +501,162 @@ export default function ExpensesClient() {
                   <div className={styles.helpText}>
                     選択中: {selectedProject ? selectedProject.name : "未選択"}
                   </div>
+                </>
+              ) : (
+                <>
+                  <select
+                    value={selectedTeamId}
+                    onChange={(event) => setSelectedTeamId(event.target.value)}
+                    className={styles.select}
+                  >
+                    <option value="">- 部門コードを選択してください -</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {formatTeamLabel(team)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className={styles.helpText}>
+                    選択中: {selectedTeam ? formatTeamLabel(selectedTeam) : "未選択"}
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <div className={styles.sectionTitle}>経費明細</div>
+              <button type="button" onClick={addDetail} className={styles.addDetailButton}>
+                ＋ 明細を追加
+              </button>
+            </div>
+
+            <div className={styles.detailList}>
+              {details.map((detail, index) => (
+                <div key={detail.id} className={styles.detailCard}>
+                  <div className={styles.detailHeader}>
+                    <div className={styles.detailTitle}>明細{index + 1}</div>
+                    <div className={styles.detailHeaderButtons}>
+                      <button
+                        type="button"
+                        className={styles.detailSubButton}
+                        onClick={() => duplicateDetail(detail.id)}
+                      >
+                        ＋ 複製
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.detailCloseButton}
+                        onClick={() => removeDetail(detail.id)}
+                        aria-label={`明細${index + 1}を削除`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={styles.detailGridTop}>
+                    <div className={styles.detailField}>
+                      <label className={styles.fieldLabel}>日付</label>
+                      <input
+                        type="date"
+                        value={detail.expenseDate}
+                        onChange={(event) =>
+                          updateDetail(detail.id, { expenseDate: event.target.value })
+                        }
+                        className={styles.input}
+                      />
+                    </div>
+
+                    <div className={styles.detailField}>
+                      <label className={styles.fieldLabel}>カテゴリ</label>
+                      <select
+                        value={detail.category}
+                        onChange={(event) =>
+                          updateDetail(detail.id, { category: event.target.value })
+                        }
+                        className={styles.select}
+                      >
+                        <option value="">選択してください</option>
+                        {CATEGORY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className={styles.detailField}>
+                      <label className={styles.fieldLabel}>金額（円）</label>
+                      <input
+                        value={detail.amount}
+                        onChange={(event) =>
+                          updateDetail(detail.id, { amount: event.target.value })
+                        }
+                        className={styles.input}
+                        inputMode="numeric"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.detailGridBottom}>
+                    <div className={styles.detailFieldWide}>
+                      <label className={styles.fieldLabel}>用途</label>
+                      <input
+                        value={detail.purpose}
+                        onChange={(event) =>
+                          updateDetail(detail.id, { purpose: event.target.value })
+                        }
+                        className={styles.input}
+                        placeholder="例：取引先との飲み会費用として"
+                      />
+                    </div>
+
+                    <div className={styles.detailFieldReceipt}>
+                      <label className={styles.fieldLabel}>領収書</label>
+                      <label className={styles.uploadButton}>
+                        アップロードする
+                        <input
+                          type="file"
+                          className={styles.hiddenFileInput}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0] ?? null;
+                            updateDetail(detail.id, {
+                              invoice: !!file,
+                              receiptFileName: file?.name ?? "",
+                              receiptFile: file,
+                            });
+                          }}
+                        />
+                      </label>
+                      {detail.receiptFileName && (
+                        <div className={styles.receiptFileName}>{detail.receiptFileName}</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
+            </div>
 
-              <div className={styles.gridRow}>
-                <div className={styles.gridLabel}>経費発生日</div>
-                <input
-                  type="date"
-                  value={expenseDate}
-                  onChange={(event) => setExpenseDate(event.target.value)}
-                  className={styles.inputSmall}
-                />
-              </div>
+            <div className={styles.totalRow}>
+              <span className={styles.totalLabel}>合計金額</span>
+              <span className={styles.totalValue}>¥{totalAmount.toLocaleString("ja-JP")}</span>
+            </div>
+          </section>
 
-              <div className={styles.gridRow}>
-                <div className={styles.gridLabel}>経費名</div>
-                <input
-                  value={expenseName}
-                  onChange={(event) => setExpenseName(event.target.value)}
-                  className={styles.input}
-                  placeholder="例: 新幹線代"
-                />
-              </div>
-
-              <div className={styles.gridRow}>
-                <div className={styles.gridLabel}>金額</div>
-                <input
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  className={styles.inputSmall}
-                  inputMode="numeric"
-                  placeholder="円単位"
-                />
-              </div>
-
-              <div className={styles.gridRow}>
-                <div className={styles.gridLabel}>インボイス</div>
-                <label className={styles.checkRow}>
-                  <input
-                    type="checkbox"
-                    checked={invoice}
-                    onChange={(event) => setInvoice(event.target.checked)}
-                  />
-                  <span>領収書に番号表記あり</span>
-                </label>
-              </div>
-
-              <div className={styles.gridRow}>
-                <div className={styles.gridLabel}>用途</div>
-                <textarea
-                  value={purpose}
-                  onChange={(event) => setPurpose(event.target.value)}
-                  className={styles.textarea}
-                  rows={5}
-                  placeholder="用途を入力"
-                />
-              </div>
-
-              <div className={styles.buttonRow}>
-                <button
-                  type="button"
-                  onClick={submit}
-                  className={styles.submitButton}
-                  disabled={saving}
-                >
-                  {saving ? "申請中..." : "申請"}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+          <div className={styles.submitRow}>
+            <button
+              type="button"
+              onClick={submit}
+              className={styles.submitButton}
+              disabled={saving || loading}
+            >
+              {saving ? "申請中..." : "申請する"}
+            </button>
+          </div>
+        </>
       ) : (
         <section className={styles.listSection}>
           {loading ? (
@@ -333,24 +669,48 @@ export default function ExpensesClient() {
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th>経費発生日</th>
-                      <th>プロジェクト</th>
-                      <th>経費名</th>
+                      <th>申請種別</th>
+                      <th>案件 / 部門</th>
+                      <th>日付</th>
+                      <th>カテゴリ</th>
                       <th>金額</th>
-                      <th>インボイス</th>
+                      <th>領収書</th>
                       <th>用途</th>
-                      <th>申請日時</th>
+                      <th>ステータス</th>
+                      <th>申請日</th>
                     </tr>
                   </thead>
                   <tbody>
                     {expenses.map((expense) => (
                       <tr key={expense.id}>
+                        <td>{formatExpenseTypeLabel(expense.expense_type)}</td>
+                        <td>{renderTargetLabel(expense)}</td>
                         <td>{formatDateJP(expense.expense_date)}</td>
-                        <td>{expense.project_id ? projectMap.get(expense.project_id) ?? "-" : "未選択"}</td>
-                        <td>{expense.expense_name ?? "-"}</td>
+                        <td>{getCategoryLabel(expense.category)}</td>
                         <td>{formatCurrency(expense.amount)}</td>
-                        <td>{expense.invoice ? "あり" : "なし"}</td>
+                        <td>
+                          {expense.receipt_file_path ? (
+                            <button
+                              type="button"
+                              className={styles.receiptLinkButton}
+                              onClick={() =>
+                                downloadReceipt(
+                                  expense.receipt_file_path!,
+                                  expense.receipt_file_name
+                                )
+                              }
+                              disabled={downloadingReceiptPath === expense.receipt_file_path}
+                            >
+                              {downloadingReceiptPath === expense.receipt_file_path
+                                ? "ダウンロード中..."
+                                : "領収書を保存"}
+                            </button>
+                          ) : (
+                            "なし"
+                          )}
+                        </td>
                         <td className={styles.purposeCell}>{expense.purpose ?? "-"}</td>
+                        <td>{formatApplicationStatus(expense.application_status)}</td>
                         <td>{formatDateJP(expense.updated_at?.slice(0, 10) ?? null)}</td>
                       </tr>
                     ))}
