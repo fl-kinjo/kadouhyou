@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/app/utils/supabase/server";
-import ProjectDetailClient from "./project-detail-client";
+import ProjectDetailTestClient from "./project-detail-test-client";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -22,7 +22,6 @@ type ProjectRow = {
   payment_due_date: string | null;
   estimate: string | null;
   invoice: string | null;
-  planned_cost_approval_status: number | null;
   created_at: string | null;
   updated_at: string | null;
   updated_by: string | null;
@@ -116,13 +115,13 @@ const STATUS_LABELS: Record<number, string> = {
   2: "営業中（中）",
   3: "営業中（低）",
   4: "営業中（最終調整）",
-  5: "確定",
-  6: "進行中",
-  7: "完了",
-  8: "滞留",
-  9: "プリセールス(無償)",
-  10: "社内案件(無償)",
-  11: "失注",
+  5: "確定前",
+  6: "確定",
+  7: "進行中",
+  8: "完了",
+  9: "滞留",
+  10: "プリセールス(無償)",
+  11: "社内案件(無償)",
 };
 
 const LABOR_COST_PER_PERSON_DAY = 35000;
@@ -212,7 +211,7 @@ function diffDaysFromToday(targetDate: string | null | undefined): number | null
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-export default async function ProjectDetailPage(props: PageProps) {
+export default async function ProjectDetailTestPage(props: PageProps) {
   const { id } = await props.params;
 
   const supabase = await createClient();
@@ -225,7 +224,7 @@ export default async function ProjectDetailPage(props: PageProps) {
   const { data: project, error: projectError } = await supabase
     .from("project")
     .select(
-      "id,project_no,name,client_id,start_date,end_date,project_manager_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice,planned_cost_approval_status,created_at,updated_at,updated_by"
+      "id,project_no,name,client_id,start_date,end_date,project_manager_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice,created_at,updated_at,updated_by"
     )
     .eq("id", id)
     .single();
@@ -435,7 +434,7 @@ export default async function ProjectDetailPage(props: PageProps) {
     : null;
 
   return (
-    <ProjectDetailClient
+    <ProjectDetailTestClient
       initialData={{
         projectId: projectRow.id,
         header: {
@@ -470,7 +469,6 @@ export default async function ProjectDetailPage(props: PageProps) {
                   .join("、")
               : "-",
           invoiceUrl: projectRow.invoice,
-          plannedCostApprovedLabel: projectRow.planned_cost_approval_status === 2 ? "◯" : "-",
         },
         profitSummary: {
           plannedTotal,

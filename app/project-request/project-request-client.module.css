@@ -1,0 +1,189 @@
+.page {
+  padding: 24px;
+  max-width: 1220px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.btnGhost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #bbb;
+  background: #fff;
+  color: #333;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.monthRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.monthButton {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.monthTitle {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.tableFrame {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #d8d8d8;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d0d0d0;
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ededed;
+  font-size: 13px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.emptyCell {
+  padding: 24px 12px;
+  color: #666;
+  text-align: center;
+}
+
+.projectLink {
+  color: #0b57d0;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.statusPending {
+  background: #ffe1a6;
+  color: #805200;
+}
+
+.statusApproved {
+  background: #cfe9bf;
+  color: #2d6a1f;
+}
+
+.statusRejected {
+  background: #ffd7e5;
+  color: #a3325d;
+}
+
+.statusCanceled {
+  background: #e4e4e4;
+  color: #555;
+}
+
+.actionRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.approveButton,
+.rejectButton,
+.cancelButton {
+  min-width: 58px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.approveButton {
+  border: none;
+  background: #2d6a1f;
+  color: #fff;
+}
+
+.rejectButton {
+  border: 1px solid #d12c2c;
+  background: #fff;
+  color: #d12c2c;
+}
+
+.cancelButton {
+  border: 1px solid #aaa;
+  background: #f3f3f3;
+  color: #333;
+}
+
+.approveButton:disabled,
+.rejectButton:disabled,
+.cancelButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 16px;
+  }
+
+  .pageTitle {
+    font-size: 26px;
+  }
+}

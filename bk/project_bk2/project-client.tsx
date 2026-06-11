@@ -14,7 +14,6 @@ type Project = {
   invoice_month: string | null;
   payment_due_date: string | null;
   invoice: string | null;
-  planned_cost_approval_status: number | null;
   created_at: string;
 };
 
@@ -59,10 +58,6 @@ function fmtDate(value: string | null | undefined) {
   return value;
 }
 
-function fmtPlannedCostApproved(status: number | null | undefined) {
-  return status === 2 ? "◯" : "-";
-}
-
 export default function ProjectClient() {
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
@@ -80,7 +75,7 @@ export default function ProjectClient() {
         await Promise.all([
           supabase
             .from("project")
-            .select("id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,planned_cost_approval_status,created_at")
+            .select("id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,created_at")
             .order("created_at", { ascending: false }),
           supabase.from("client").select("id,name"),
         ]);
@@ -129,9 +124,6 @@ export default function ProjectClient() {
       <div className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>案件一覧</h1>
         <div className={styles.pageHeaderLinks}>
-          <Link href="/project-request" className={styles.btnGhost}>
-            案件申請管理
-          </Link>
           <Link href="/project/new" className={styles.btnRed}>
             ＋ 案件登録
           </Link>
@@ -182,19 +174,18 @@ export default function ProjectClient() {
                 <th className={styles.th}>請求額</th>
                 <th className={styles.th}>請求月</th>
                 <th className={styles.th}>支払期日</th>
-                <th className={styles.th}>予定工数承認済み</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td className={styles.td} colSpan={8}>
+                  <td className={styles.td} colSpan={7}>
                     読み込み中...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td className={styles.td} colSpan={8}>
+                  <td className={styles.td} colSpan={7}>
                     案件がありません。
                   </td>
                 </tr>
@@ -212,7 +203,6 @@ export default function ProjectClient() {
                     <td className={styles.td}>{fmtYen(project.invoice_amount)}</td>
                     <td className={styles.td}>{fmtMonth(project.invoice_month)}</td>
                     <td className={styles.td}>{fmtDate(project.payment_due_date)}</td>
-                    <td className={styles.tdCenter}>{fmtPlannedCostApproved(project.planned_cost_approval_status)}</td>
                   </tr>
                 ))
               )}

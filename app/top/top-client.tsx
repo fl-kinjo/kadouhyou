@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/app/utils/supabase/client";
 import styles from "./top-client.module.css";
@@ -38,6 +39,7 @@ type Project = {
   payment_due_date: string | null;
   invoice: string | null;
   project_manager_id: string | null;
+  planned_cost_approval_status: number | null;
 };
 
 type ProjectMember = {
@@ -259,6 +261,7 @@ export default function TopClient() {
   const [unbilledProjects, setUnbilledProjects] = useState<DisplayProject[]>([]);
 
   const [assignedProjects, setAssignedProjects] = useState<Project[]>([]);
+  const [pendingPlannedCostApprovalProjects, setPendingPlannedCostApprovalProjects] = useState<Project[]>([]);
   const [projectPlannedCosts, setProjectPlannedCosts] = useState<ProjectPlannedCostRow[]>([]);
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
   const [approvedLeaveRows, setApprovedLeaveRows] = useState<LeaveRequestRow[]>([]);
@@ -302,8 +305,7 @@ export default function TopClient() {
       const prevWeekStartKey = getTodayDateString(prevWeekStart);
       const prevWeekEndKey = getTodayDateString(prevWeekEnd);
 
-      const alertRangeStart =
-        currentMonthStart <= prevWeekStart ? currentMonthStart : prevWeekStart;
+      const alertRangeStart = currentMonthStart <= prevWeekStart ? currentMonthStart : prevWeekStart;
       const alertRangeStartKey = getTodayDateString(alertRangeStart);
 
       const decisionSince = addDays(today, -14).toISOString();
@@ -373,7 +375,9 @@ export default function TopClient() {
           .order("break_out_time", { ascending: true }),
         supabase
           .from("project")
-          .select("id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id")
+          .select(
+            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status"
+          )
           .order("updated_at", { ascending: false }),
         supabase.from("project_member").select("project_id,profile_id"),
         supabase.from("client").select("id,name"),
@@ -492,6 +496,9 @@ export default function TopClient() {
       setAssignedProjects(nextAssignedProjects);
       setOngoingProjects(assignedDisplayProjects.filter((project) => project.status === 6));
       setUnbilledProjects(assignedDisplayProjects.filter((project) => isBlank(project.invoice)));
+      setPendingPlannedCostApprovalProjects(
+        projects.filter((project) => project.planned_cost_approval_status === 1)
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -681,9 +688,7 @@ export default function TopClient() {
     const prevWeekStart = addDays(currentWeekStart, -7);
     const prevWeekEnd = addDays(prevWeekStart, 6);
 
-    const leaveMap = new Map(
-      approvedLeaveRows.map((row) => [row.work_date, row])
-    );
+    const leaveMap = new Map(approvedLeaveRows.map((row) => [row.work_date, row]));
 
     const reportHoursByDate = new Map<string, number>();
     for (const row of reportRows) {
@@ -821,6 +826,13 @@ export default function TopClient() {
           description: "管理者対応が必要です。",
         });
       }
+
+      if (pendingPlannedCostApprovalProjects.length > 0) {
+        requestItems.push({
+          title: `予定工数確認依頼の未対応が${pendingPlannedCostApprovalProjects.length}件あります`,
+          description: formatNameSummary(pendingPlannedCostApprovalProjects.map((project) => project.name)),
+        });
+      }
     }
 
     const approvedLeaveCount = decisionLeaveRows.filter((row) => row.approval_status === 1).length;
@@ -868,6 +880,7 @@ export default function TopClient() {
     pendingCorrectionRows,
     pendingExpenseRows,
     pendingLeaveRows,
+    pendingPlannedCostApprovalProjects,
     profile?.is_admin,
     projectPlannedCosts,
     reportRows,
@@ -1021,7 +1034,11 @@ export default function TopClient() {
               ) : (
                 ongoingProjects.map((project) => (
                   <tr key={project.id}>
-                    <td>{project.name}</td>
+                    <td>
+                      <Link href={`/project/${project.id}`} className={styles.projectLink}>
+                        {project.name}
+                      </Link>
+                    </td>
                     <td>{project.client_name}</td>
                     <td>{project.status != null ? (STATUS_LABELS[project.status] ?? String(project.status)) : "-"}</td>
                     <td>{formatCurrency(project.invoice_amount)}</td>
@@ -1063,7 +1080,11 @@ export default function TopClient() {
               ) : (
                 unbilledProjects.map((project) => (
                   <tr key={project.id}>
-                    <td>{project.name}</td>
+                    <td>
+                      <Link href={`/project/${project.id}`} className={styles.projectLink}>
+                        {project.name}
+                      </Link>
+                    </td>
                     <td>{project.client_name}</td>
                     <td>{project.status != null ? (STATUS_LABELS[project.status] ?? String(project.status)) : "-"}</td>
                     <td>{formatCurrency(project.invoice_amount)}</td>

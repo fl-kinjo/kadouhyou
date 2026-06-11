@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createClient } from "@/app/utils/supabase/client";
-import TestProjectDetailActions from "./test-project-detail-actions";
+import ProjectDetailActions from "./project-detail-actions";
+import CostTabsSection from "./cost-tabs-section";
 import styles from "./page.module.css";
 
 type SalesRecognitionRow = {
@@ -64,6 +65,53 @@ type InitialData = {
     savedCells: SavedRecognitionCell[];
     invoiceAmount: number;
   };
+  cost: {
+    startDate: string | null;
+    endDate: string | null;
+    plannedCosts: {
+      id: string;
+      project_id: string;
+      category: number;
+      expense_name: string | null;
+      partner_id: string | null;
+      job_id: string | null;
+      profile_id: string | null;
+      operating_person_months: number | string | null;
+      target_year_month: string;
+      amount: number | null;
+    }[];
+    actualCosts: {
+      id: string;
+      project_id: string;
+      category: number;
+      expense_name: string | null;
+      partner_id: string | null;
+      target_year_month: string;
+      amount: number | string | null;
+    }[];
+    reports: {
+      id: string;
+      profile_id: string;
+      project_id: string;
+      work_date: string;
+      hours: number | string | null;
+    }[];
+    profiles: {
+      id: string;
+      last_name: string | null;
+      first_name: string | null;
+      email: string | null;
+      status: number | null;
+    }[];
+    partners: {
+      id: string;
+      name: string;
+    }[];
+    jobs: {
+      id: string;
+      name: string;
+    }[];
+  };
 };
 
 function toSafeNumber(value: number | string | null | undefined): number {
@@ -104,7 +152,7 @@ function buildCellKey(profileId: string, targetYearMonth: string): string {
   return `${profileId}_${targetYearMonth}`;
 }
 
-export default function ProjectDetailTestClient({ initialData }: { initialData: InitialData }) {
+export default function ProjectDetailClient({ initialData }: { initialData: InitialData }) {
   const supabase = createClient();
 
   const [displaySalesRows, setDisplaySalesRows] = useState<SalesRecognitionRow[]>(
@@ -327,7 +375,7 @@ export default function ProjectDetailTestClient({ initialData }: { initialData: 
           </div>
         </div>
 
-        <TestProjectDetailActions projectId={initialData.projectId} />
+        <ProjectDetailActions projectId={initialData.projectId} />
       </div>
 
       <section className={styles.cardSummaryRow}>
@@ -481,6 +529,18 @@ export default function ProjectDetailTestClient({ initialData }: { initialData: 
           </table>
         </div>
       </section>
+
+      <CostTabsSection
+        projectId={initialData.projectId}
+        startDate={initialData.cost.startDate}
+        endDate={initialData.cost.endDate}
+        plannedCosts={initialData.cost.plannedCosts}
+        actualCosts={initialData.cost.actualCosts}
+        reports={initialData.cost.reports}
+        profiles={initialData.cost.profiles}
+        partners={initialData.cost.partners}
+        jobs={initialData.cost.jobs}
+      />
 
       {isModalOpen && (
         <div className={styles.modalOverlay} onClick={closeEditModal}>

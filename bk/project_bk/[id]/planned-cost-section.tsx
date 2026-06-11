@@ -61,10 +61,6 @@ const CATEGORY_LABELS: Record<number, string> = {
 
 const COST_PER_PERSON_DAY = 35000;
 
-const PLANNED_COST_APPROVAL_STATUS = {
-  pending: 1,
-} as const;
-
 function fullName(lastName?: string | null, firstName?: string | null) {
   const name = `${lastName ?? ""}${firstName ?? ""}`.trim();
   return name || "-";
@@ -331,21 +327,6 @@ export default function PlannedCostSection({
     return profile.id;
   };
 
-  const markPlannedCostApprovalPending = async (updaterId: string) => {
-    const { error } = await supabase
-      .from("project")
-      .update({
-        planned_cost_approval_status: PLANNED_COST_APPROVAL_STATUS.pending,
-        planned_cost_requested_at: new Date().toISOString(),
-        planned_cost_reviewed_at: null,
-        planned_cost_reviewed_by: null,
-        updated_by: updaterId,
-      })
-      .eq("id", projectId);
-
-    if (error) throw new Error(error.message);
-  };
-
   const save = async () => {
     setErrorMsg("");
     const categoryNumber = Number(category);
@@ -372,8 +353,6 @@ export default function PlannedCostSection({
     setSaving(true);
     try {
       const updaterId = await getUpdaterId();
-      const targetGroup = editGroupKey ? groups.find((group) => group.key === editGroupKey) : null;
-      const shouldRequestPlannedCostApproval = categoryNumber === 2 || targetGroup?.category === 2;
       const payload = monthEntries.map((entry) => ({
         project_id: projectId,
         category: categoryNumber,
@@ -389,9 +368,12 @@ export default function PlannedCostSection({
         updated_by: updaterId,
       }));
 
-      if (editGroupKey && targetGroup) {
-        const { error: deleteError } = await supabase.from("project_planned_cost").delete().in("id", targetGroup.rowIds);
-        if (deleteError) throw new Error(deleteError.message);
+      if (editGroupKey) {
+        const targetGroup = groups.find((group) => group.key === editGroupKey);
+        if (targetGroup) {
+          const { error: deleteError } = await supabase.from("project_planned_cost").delete().in("id", targetGroup.rowIds);
+          if (deleteError) throw new Error(deleteError.message);
+        }
       }
 
       const { data, error } = await supabase
@@ -400,10 +382,6 @@ export default function PlannedCostSection({
         .select("id,project_id,category,expense_name,partner_id,job_id,profile_id,operating_person_months,target_year_month,amount");
 
       if (error) throw new Error(error.message);
-
-      if (shouldRequestPlannedCostApproval) {
-        await markPlannedCostApprovalPending(updaterId);
-      }
 
       const nextInserted = (data ?? []) as PlannedCost[];
       setCosts((current) => {
@@ -426,14 +404,8 @@ export default function PlannedCostSection({
     if (!window.confirm("このコスト行を削除しますか？")) return;
     setErrorMsg("");
     try {
-      const updaterId = await getUpdaterId();
       const { error } = await supabase.from("project_planned_cost").delete().in("id", group.rowIds);
       if (error) throw new Error(error.message);
-
-      if (group.category === 2) {
-        await markPlannedCostApprovalPending(updaterId);
-      }
-
       setCosts((current) => current.filter((item) => !group.rowIds.includes(item.id)));
       router.refresh();
     } catch (error) {

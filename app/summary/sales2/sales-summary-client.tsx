@@ -561,14 +561,14 @@ export default function SalesSummaryClient() {
           className={`${styles.tabButton} ${activeTab === "previous" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("previous")}
         >
-          前週レポート
+          前週(確定)
         </button>
         <button
           type="button"
           className={`${styles.tabButton} ${activeTab === "current" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("current")}
         >
-          今週の速報
+          今週
         </button>
       </div>
 

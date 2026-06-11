@@ -346,3 +346,13 @@
     font-size: 16px;
   }
 }
+
+.projectLink {
+  color: #2563eb;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.projectLink:hover {
+  text-decoration: underline;
+}

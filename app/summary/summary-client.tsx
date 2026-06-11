@@ -757,14 +757,14 @@ export default function SummaryClient() {
             className={`${styles.tabButton} ${directorTab === "working" ? styles.tabButtonActive : ""}`}
             onClick={() => setDirectorTab("working")}
           >
-            稼働売上
+            月割計上(進捗ベース)
           </button>
           <button
             type="button"
             className={`${styles.tabButton} ${directorTab === "billing" ? styles.tabButtonActive : ""}`}
             onClick={() => setDirectorTab("billing")}
           >
-            請求売上
+            請求月一括計上(検収ベース)
           </button>
           <button
             type="button"
@@ -806,7 +806,7 @@ export default function SummaryClient() {
             </thead>
             <tbody>
               <tr>
-                <td className={styles.tdFixed}>稼働率</td>
+                <td className={styles.tdFixed}>達成率</td>
                 {monthlyRows.map((row) => (
                   <td key={row.key} className={styles.tdMonth}>
                     {formatPercent(row.rate * 100)}

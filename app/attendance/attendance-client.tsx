@@ -26,6 +26,9 @@ type LeaveRequestRow = {
   work_date: string;
   leave_type: number;
   approval_status: number;
+  request_group_id: string | null;
+  comment: string | null;
+  created_at: string;
 };
 
 type AttendanceCorrectionRequestRow = {
@@ -39,7 +42,7 @@ type AttendanceCorrectionRequestRow = {
   requested_start_time: string | null;
   requested_end_time: string | null;
   requested_away_minutes: number | null;
-  requested_status_label: string;
+  requested_status_label: string | null;
   comment: string | null;
   approval_status: number;
   requested_at: string;
@@ -65,6 +68,12 @@ type DayRow = {
     | "special"
     | "unpaid"
     | "missing"
+    | "correctionPending"
+    | "correctionRejected"
+    | "correctionCanceled"
+    | "leavePending"
+    | "leaveRejected"
+    | "leaveCanceled"
     | "none";
   isFuture: boolean;
   hasPendingRequest: boolean;
@@ -79,16 +88,35 @@ type CorrectionFormState = {
   comment: string;
 };
 
+const LEAVE_TYPE_OPTIONS = [
+  { value: 0, label: "有給" },
+  { value: 1, label: "午前休" },
+  { value: 2, label: "午後休" },
+  { value: 3, label: "特別休暇" },
+  { value: 4, label: "無給" },
+  { value: 5, label: "夏休" },
+] as const;
+
 const LEAVE_TYPE_LABELS: Record<number, string> = {
   0: "有給",
-  1: "午前半休",
-  2: "午後半休",
+  1: "午前休",
+  2: "午後休",
   3: "特別休暇",
   4: "無給",
   5: "夏休",
 };
 
-const CORRECTION_STATUS_OPTIONS = [{ value: "出勤", label: "出勤" }] as const;
+const APPROVAL_STATUS = {
+  pending: 0,
+  approved: 1,
+  rejected: 2,
+  canceled: 3,
+} as const;
+
+const CORRECTION_STATUS_OPTIONS = [
+  { value: "出勤", label: "出勤" },
+  ...LEAVE_TYPE_OPTIONS,
+] as const;
 
 function getMonthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -120,6 +148,21 @@ function parseTimeToMinutes(value: string | null) {
   const [hh, mm] = text.split(":").map(Number);
   if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
   return hh * 60 + mm;
+}
+
+function getLunchBreakMinutes(startTime: string | null, endTime: string | null) {
+  const start = parseTimeToMinutes(startTime);
+  const end = parseTimeToMinutes(endTime);
+
+  if (start == null || end == null || end <= start) return 0;
+
+  const lunchStart = 12 * 60;
+  const lunchEnd = 13 * 60;
+
+  const overlapStart = Math.max(start, lunchStart);
+  const overlapEnd = Math.min(end, lunchEnd);
+
+  return Math.max(0, overlapEnd - overlapStart);
 }
 
 function formatDuration(minutes: number | null) {
@@ -160,7 +203,9 @@ function getWorkedMinutes(startTime: string | null, endTime: string | null, away
   if (start == null || end == null || end < start) return null;
 
   const away = Math.max(0, awayMinutes ?? 0);
-  return Math.max(0, end - start - away);
+  const lunchBreak = getLunchBreakMinutes(startTime, endTime);
+
+  return Math.max(0, end - start - lunchBreak - away);
 }
 
 function getOvertimeMinutes(workMinutes: number | null) {
@@ -168,9 +213,77 @@ function getOvertimeMinutes(workMinutes: number | null) {
   return Math.max(0, workMinutes - 8 * 60);
 }
 
+function getLeaveTypeLabel(value: number) {
+  return LEAVE_TYPE_LABELS[value] ?? String(value);
+}
+
+function getLeaveTypeFromLabel(label: string | null | undefined) {
+  const value = label?.trim();
+
+  switch (value) {
+    case "有給":
+      return 0;
+    case "午前休":
+    case "午前半休":
+      return 1;
+    case "午後休":
+    case "午後半休":
+      return 2;
+    case "特別休暇":
+      return 3;
+    case "無給":
+      return 4;
+    case "夏休":
+      return 5;
+    default:
+      return null;
+  }
+}
+
+function isLeaveStatusLabel(label: string | null | undefined) {
+  return getLeaveTypeFromLabel(label) !== null;
+}
+
+function normalizeFormStatusLabel(label: string | null | undefined) {
+  const value = label?.trim();
+
+  if (value === "出勤") return "出勤";
+
+  const leaveType = getLeaveTypeFromLabel(value);
+  if (leaveType !== null) return getLeaveTypeLabel(leaveType);
+
+  return "出勤";
+}
+
+function normalizeCorrectionStatusLabel(label: string | null | undefined) {
+  const value = label?.trim();
+
+  if (value === "出勤") {
+    return "出勤";
+  }
+
+  return "出勤";
+}
+
 function getStatusTypeFromLabel(
   label: string
-): "work" | "holiday" | "paid" | "am" | "pm" | "summer" | "special" | "unpaid" | "missing" | "none" {
+):
+  | "work"
+  | "holiday"
+  | "paid"
+  | "am"
+  | "pm"
+  | "summer"
+  | "special"
+  | "unpaid"
+  | "missing"
+  | "correctionPending"
+  | "correctionRejected"
+  | "correctionCanceled"
+  | "leavePending"
+  | "leaveRejected"
+  | "leaveCanceled"
+  | "none" {
   switch (label) {
     case "出勤":
       return "work";
@@ -178,8 +291,10 @@ function getStatusTypeFromLabel(
       return "holiday";
     case "有給":
       return "paid";
+    case "午前休":
     case "午前半休":
       return "am";
+    case "午後休":
     case "午後半休":
       return "pm";
     case "夏休":
@@ -190,6 +305,18 @@ function getStatusTypeFromLabel(
       return "unpaid";
     case "未入力":
       return "missing";
+    case "修正申請中":
+      return "correctionPending";
+    case "申請却下":
+      return "correctionRejected";
+    case "申請取消":
+      return "correctionCanceled";
+    case "休暇申請中":
+      return "leavePending";
+    case "休暇申請却下":
+      return "leaveRejected";
+    case "休暇申請取消":
+      return "leaveCanceled";
     case "":
       return "none";
     default:
@@ -202,41 +329,50 @@ function getStatusInfo(params: {
   isHoliday: boolean;
   leaveRequest: LeaveRequestRow | null;
   hasAttendance: boolean;
-  approvedCorrection: AttendanceCorrectionRequestRow | null;
+  correctionRequest: AttendanceCorrectionRequestRow | null;
 }) {
-  const { isFuture, isHoliday, leaveRequest, hasAttendance, approvedCorrection } = params;
+  const { isFuture, isHoliday, leaveRequest, hasAttendance, correctionRequest } = params;
 
   if (isFuture) {
     return { label: "", type: "none" as const };
   }
 
-  if (approvedCorrection) {
-    const label = approvedCorrection.requested_status_label || "出勤";
+  if (correctionRequest?.approval_status === APPROVAL_STATUS.pending) {
+    return { label: "修正申請中", type: "correctionPending" as const };
+  }
+
+  if (correctionRequest?.approval_status === APPROVAL_STATUS.rejected) {
+    return { label: "申請却下", type: "correctionRejected" as const };
+  }
+
+  if (correctionRequest?.approval_status === APPROVAL_STATUS.canceled) {
+    return { label: "申請取消", type: "correctionCanceled" as const };
+  }
+
+  if (correctionRequest?.approval_status === APPROVAL_STATUS.approved) {
+    const label = normalizeCorrectionStatusLabel(correctionRequest.requested_status_label);
+    return { label, type: getStatusTypeFromLabel(label) };
+  }
+
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.pending) {
+    return { label: "休暇申請中", type: "leavePending" as const };
+  }
+
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.rejected) {
+    return { label: "休暇申請却下", type: "leaveRejected" as const };
+  }
+
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.canceled) {
+    return { label: "休暇申請取消", type: "leaveCanceled" as const };
+  }
+
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.approved) {
+    const label = getLeaveTypeLabel(leaveRequest.leave_type);
     return { label, type: getStatusTypeFromLabel(label) };
   }
 
   if (isHoliday) {
     return { label: "休日", type: "holiday" as const };
-  }
-
-  if (leaveRequest) {
-    const leaveType = leaveRequest.leave_type;
-    switch (leaveType) {
-      case 0:
-        return { label: "有給", type: "paid" as const };
-      case 1:
-        return { label: "午前半休", type: "am" as const };
-      case 2:
-        return { label: "午後半休", type: "pm" as const };
-      case 3:
-        return { label: "特別休暇", type: "special" as const };
-      case 4:
-        return { label: "無給", type: "unpaid" as const };
-      case 5:
-        return { label: "夏休", type: "summer" as const };
-      default:
-        return { label: LEAVE_TYPE_LABELS[leaveType] ?? "-", type: "none" as const };
-    }
   }
 
   if (hasAttendance) {
@@ -266,11 +402,10 @@ function getAwayMinutesByDate(rows: AttendanceBreakRow[]) {
   return map;
 }
 
-function getLatestRequestMap(rows: AttendanceCorrectionRequestRow[], approvalStatus: number) {
-  const filtered = rows.filter((row) => row.approval_status === approvalStatus);
+function getLatestCorrectionRequestMap(rows: AttendanceCorrectionRequestRow[]) {
   const map = new Map<string, AttendanceCorrectionRequestRow>();
 
-  for (const row of filtered) {
+  for (const row of rows) {
     const current = map.get(row.work_date);
     if (!current || current.requested_at < row.requested_at) {
       map.set(row.work_date, row);
@@ -278,6 +413,27 @@ function getLatestRequestMap(rows: AttendanceCorrectionRequestRow[], approvalSta
   }
 
   return map;
+}
+
+function getLatestLeaveRequestMap(rows: LeaveRequestRow[]) {
+  const map = new Map<string, LeaveRequestRow>();
+
+  for (const row of rows) {
+    const current = map.get(row.work_date);
+    if (!current || current.created_at < row.created_at) {
+      map.set(row.work_date, row);
+    }
+  }
+
+  return map;
+}
+
+function createRequestGroupId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export default function AttendanceClient() {
@@ -296,6 +452,7 @@ export default function AttendanceClient() {
   const [editTarget, setEditTarget] = useState<DayRow | null>(null);
   const [requestSaving, setRequestSaving] = useState(false);
   const [requestCompleteOpen, setRequestCompleteOpen] = useState(false);
+  const [requestCompleteMessage, setRequestCompleteMessage] = useState("申請が完了しました");
   const [editForm, setEditForm] = useState<CorrectionFormState>({
     work_date: "",
     start_time: "",
@@ -344,12 +501,13 @@ export default function AttendanceClient() {
           .order("break_out_time", { ascending: true }),
         supabase
           .from("leave_request")
-          .select("id,profile_id,work_date,leave_type,approval_status")
+          .select("id,profile_id,work_date,leave_type,approval_status,request_group_id,comment,created_at")
           .eq("profile_id", userId)
-          .eq("approval_status", 1)
           .gte("work_date", from)
           .lte("work_date", to)
-          .order("work_date", { ascending: true }),
+          .in("approval_status", [0, 1, 2, 3])
+          .order("work_date", { ascending: true })
+          .order("created_at", { ascending: false }),
         supabase
           .from("attendance_correction_request")
           .select(
@@ -358,7 +516,7 @@ export default function AttendanceClient() {
           .eq("profile_id", userId)
           .gte("work_date", from)
           .lte("work_date", to)
-          .in("approval_status", [0, 1])
+          .in("approval_status", [0, 1, 2, 3])
           .order("requested_at", { ascending: false }),
       ]);
 
@@ -393,12 +551,11 @@ export default function AttendanceClient() {
 
   const todayKey = useMemo(() => getDateKey(new Date()), []);
   const awayMinutesMap = useMemo(() => getAwayMinutesByDate(attendanceBreakRows), [attendanceBreakRows]);
-  const approvedCorrectionMap = useMemo(() => getLatestRequestMap(correctionRows, 1), [correctionRows]);
-  const pendingCorrectionMap = useMemo(() => getLatestRequestMap(correctionRows, 0), [correctionRows]);
+  const latestCorrectionMap = useMemo(() => getLatestCorrectionRequestMap(correctionRows), [correctionRows]);
+  const latestLeaveMap = useMemo(() => getLatestLeaveRequestMap(leaveRows), [leaveRows]);
 
   const dayRows = useMemo<DayRow[]>(() => {
     const attendanceMap = new Map(attendanceRows.map((row) => [row.work_date, row]));
-    const leaveMap = new Map(leaveRows.map((row) => [row.work_date, row]));
 
     const result: DayRow[] = [];
     const monthStart = getMonthStart(displayMonth);
@@ -408,9 +565,17 @@ export default function AttendanceClient() {
       const current = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
       const dateKey = getDateKey(current);
       const attendance = attendanceMap.get(dateKey) ?? null;
-      const leaveRequest = leaveMap.get(dateKey) ?? null;
-      const approvedCorrection = approvedCorrectionMap.get(dateKey) ?? null;
-      const pendingCorrection = pendingCorrectionMap.get(dateKey) ?? null;
+      const latestCorrection = latestCorrectionMap.get(dateKey) ?? null;
+      const latestLeaveRequest = latestLeaveMap.get(dateKey) ?? null;
+
+      const approvedCorrection =
+        latestCorrection?.approval_status === APPROVAL_STATUS.approved ? latestCorrection : null;
+
+      const pendingCorrection =
+        latestCorrection?.approval_status === APPROVAL_STATUS.pending ? latestCorrection : null;
+
+      const pendingLeaveRequest =
+        latestLeaveRequest?.approval_status === APPROVAL_STATUS.pending ? latestLeaveRequest : null;
 
       const isWeekend = current.getDay() === 0 || current.getDay() === 6;
       const isHoliday = isWeekend || holidaySet.has(dateKey);
@@ -418,15 +583,14 @@ export default function AttendanceClient() {
 
       const startTime = approvedCorrection?.requested_start_time ?? attendance?.start_time ?? null;
       const endTime = approvedCorrection?.requested_end_time ?? attendance?.end_time ?? null;
-      const awayMinutes =
-        approvedCorrection?.requested_away_minutes ?? awayMinutesMap.get(dateKey) ?? 0;
+      const awayMinutes = approvedCorrection?.requested_away_minutes ?? awayMinutesMap.get(dateKey) ?? 0;
 
       const status = getStatusInfo({
         isFuture,
         isHoliday,
-        leaveRequest,
+        leaveRequest: latestLeaveRequest,
         hasAttendance: !!(startTime || endTime),
-        approvedCorrection,
+        correctionRequest: latestCorrection,
       });
 
       const workMinutes = getWorkedMinutes(startTime, endTime, awayMinutes);
@@ -444,21 +608,12 @@ export default function AttendanceClient() {
         statusLabel: status.label,
         statusType: status.type,
         isFuture,
-        hasPendingRequest: !!pendingCorrection,
+        hasPendingRequest: !!pendingCorrection || !!pendingLeaveRequest,
       });
     }
 
     return result;
-  }, [
-    approvedCorrectionMap,
-    attendanceRows,
-    awayMinutesMap,
-    displayMonth,
-    holidaySet,
-    leaveRows,
-    pendingCorrectionMap,
-    todayKey,
-  ]);
+  }, [attendanceRows, awayMinutesMap, displayMonth, holidaySet, latestCorrectionMap, latestLeaveMap, todayKey]);
 
   const summary = useMemo(() => {
     const workedMinutes = dayRows.reduce((sum, row) => sum + (row.workMinutes ?? 0), 0);
@@ -481,7 +636,7 @@ export default function AttendanceClient() {
       start_time: row.startTime ? row.startTime.slice(0, 5) : "",
       end_time: row.endTime ? row.endTime.slice(0, 5) : "",
       away_duration: formatDuration(row.awayMinutes ?? 0) === "-" ? "" : formatDuration(row.awayMinutes ?? 0),
-      status_label: row.statusLabel || "出勤",
+      status_label: normalizeFormStatusLabel(row.statusLabel),
       comment: "",
     });
   };
@@ -504,6 +659,28 @@ export default function AttendanceClient() {
       const userId = authData.user?.id;
       if (!userId) throw new Error("ログインユーザーを取得できません。");
 
+      const leaveType = getLeaveTypeFromLabel(editForm.status_label);
+
+      if (leaveType !== null) {
+        const { error } = await supabase.from("leave_request").insert({
+          profile_id: userId,
+          work_date: editForm.work_date,
+          leave_type: leaveType,
+          approval_status: APPROVAL_STATUS.pending,
+          request_group_id: createRequestGroupId(),
+          comment: editForm.comment.trim() || null,
+          updated_by: userId,
+        });
+
+        if (error) throw new Error(error.message);
+
+        setEditTarget(null);
+        setRequestCompleteMessage("休暇申請が完了しました");
+        setRequestCompleteOpen(true);
+        await load();
+        return;
+      }
+
       const awayMinutes = parseDurationToMinutes(editForm.away_duration);
       if (awayMinutes == null) {
         throw new Error("離席時間は hh:mm 形式で入力してください。");
@@ -515,6 +692,8 @@ export default function AttendanceClient() {
         throw new Error("退勤時刻は出勤時刻以降を入力してください。");
       }
 
+      const requestedStatusLabel = normalizeCorrectionStatusLabel(editForm.status_label);
+
       const { error } = await supabase.from("attendance_correction_request").insert({
         profile_id: userId,
         work_date: editForm.work_date,
@@ -525,15 +704,16 @@ export default function AttendanceClient() {
         requested_start_time: editForm.start_time || null,
         requested_end_time: editForm.end_time || null,
         requested_away_minutes: awayMinutes,
-        requested_status_label: editForm.status_label || "出勤",
+        requested_status_label: requestedStatusLabel,
         comment: editForm.comment.trim() || null,
-        approval_status: 0,
+        approval_status: APPROVAL_STATUS.pending,
         requested_by: userId,
       });
 
       if (error) throw new Error(error.message);
 
       setEditTarget(null);
+      setRequestCompleteMessage("打刻修正申請が完了しました");
       setRequestCompleteOpen(true);
       await load();
     } catch (error) {
@@ -542,6 +722,45 @@ export default function AttendanceClient() {
       setRequestSaving(false);
     }
   };
+
+  const getStatusBadgeClassName = (statusType: DayRow["statusType"]) => {
+    switch (statusType) {
+      case "work":
+        return styles.statusWork;
+      case "holiday":
+        return styles.statusHoliday;
+      case "paid":
+        return styles.statusPaid;
+      case "am":
+        return styles.statusAm;
+      case "pm":
+        return styles.statusPm;
+      case "summer":
+        return styles.statusSummer;
+      case "special":
+        return styles.statusSpecial;
+      case "unpaid":
+        return styles.statusUnpaid;
+      case "missing":
+        return styles.statusMissing;
+      case "correctionPending":
+        return styles.statusCorrectionPending;
+      case "correctionRejected":
+        return styles.statusCorrectionRejected;
+      case "correctionCanceled":
+        return styles.statusCorrectionCanceled;
+      case "leavePending":
+        return styles.statusLeavePending;
+      case "leaveRejected":
+        return styles.statusLeaveRejected;
+      case "leaveCanceled":
+        return styles.statusLeaveCanceled;
+      default:
+        return "";
+    }
+  };
+
+  const isLeaveSelected = isLeaveStatusLabel(editForm.status_label);
 
   return (
     <main className={styles.page}>
@@ -644,42 +863,22 @@ export default function AttendanceClient() {
                       <td>{formatDuration(row.overtimeMinutes)}</td>
                       <td>
                         {row.statusLabel ? (
-                          <span
-                            className={`${styles.statusBadge} ${
-                              row.statusType === "work"
-                                ? styles.statusWork
-                                : row.statusType === "holiday"
-                                  ? styles.statusHoliday
-                                  : row.statusType === "paid"
-                                    ? styles.statusPaid
-                                    : row.statusType === "am"
-                                      ? styles.statusAm
-                                      : row.statusType === "pm"
-                                        ? styles.statusPm
-                                        : row.statusType === "summer"
-                                          ? styles.statusSummer
-                                          : row.statusType === "special"
-                                            ? styles.statusSpecial
-                                            : row.statusType === "unpaid"
-                                              ? styles.statusUnpaid
-                                              : row.statusType === "missing"
-                                                ? styles.statusMissing
-                                                : ""
-                            }`}
-                          >
+                          <span className={`${styles.statusBadge} ${getStatusBadgeClassName(row.statusType)}`}>
                             {row.statusLabel}
                           </span>
                         ) : null}
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className={styles.editButton}
-                          onClick={() => openEditModal(row)}
-                          disabled={row.isFuture || row.hasPendingRequest}
-                        >
-                          {row.hasPendingRequest ? "申請中" : "修正"}
-                        </button>
+                        {!row.isFuture ? (
+                          <button
+                            type="button"
+                            className={styles.editButton}
+                            onClick={() => openEditModal(row)}
+                            disabled={row.hasPendingRequest}
+                          >
+                            {row.hasPendingRequest ? "申請中" : "修正"}
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -693,68 +892,77 @@ export default function AttendanceClient() {
       {editTarget && (
         <div className={styles.modalOverlay} onClick={closeEditModal}>
           <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
-            <h2 className={styles.modalTitle}>打刻修正申請</h2>
+            <h2 className={styles.modalTitle}>勤怠修正・休暇申請</h2>
 
             <div className={styles.modalSubTitle}>
               <span>{formatDateForPopup(editTarget.dateKey)}</span>
             </div>
 
             <div className={styles.modalFields}>
-              <div className={styles.modalFieldRow}>
-                <div className={styles.modalField}>
-                  <label className={styles.modalLabel}>出勤</label>
-                  <input
-                    type="time"
-                    value={editForm.start_time}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, start_time: event.target.value }))
-                    }
-                    className={styles.modalInput}
-                  />
-                </div>
-                <div className={styles.modalField}>
-                  <label className={styles.modalLabel}>退勤</label>
-                  <input
-                    type="time"
-                    value={editForm.end_time}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, end_time: event.target.value }))
-                    }
-                    className={styles.modalInput}
-                  />
-                </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>ステータス</label>
+                <select
+                  value={editForm.status_label}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, status_label: event.target.value }))
+                  }
+                  className={`${styles.modalInput} ${styles.modalSelect}`}
+                >
+                  {CORRECTION_STATUS_OPTIONS.map((option) => (
+                    <option key={String(option.value)} value={String(option.label)}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className={styles.modalFieldRow}>
-                <div className={styles.modalField}>
-                  <label className={styles.modalLabel}>離席時間</label>
-                  <input
-                    type="text"
-                    value={editForm.away_duration}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, away_duration: event.target.value }))
-                    }
-                    className={styles.modalInput}
-                    placeholder="01:00"
-                  />
-                </div>
-                <div className={styles.modalField}>
-                  <label className={styles.modalLabel}>ステータス</label>
-                  <select
-                    value={editForm.status_label}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, status_label: event.target.value }))
-                    }
-                    className={`${styles.modalInput} ${styles.modalSelect}`}
-                  >
-                    {CORRECTION_STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              {!isLeaveSelected && (
+                <>
+                  <div className={styles.modalFieldRow}>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>出勤</label>
+                      <input
+                        type="time"
+                        value={editForm.start_time}
+                        onChange={(event) =>
+                          setEditForm((current) => ({ ...current, start_time: event.target.value }))
+                        }
+                        className={styles.modalInput}
+                      />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>退勤</label>
+                      <input
+                        type="time"
+                        value={editForm.end_time}
+                        onChange={(event) =>
+                          setEditForm((current) => ({ ...current, end_time: event.target.value }))
+                        }
+                        className={styles.modalInput}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.modalField}>
+                    <label className={styles.modalLabel}>離席時間</label>
+                    <input
+                      type="text"
+                      value={editForm.away_duration}
+                      onChange={(event) =>
+                        setEditForm((current) => ({ ...current, away_duration: event.target.value }))
+                      }
+                      className={styles.modalInput}
+                      placeholder="00:00"
+                    />
+                  </div>
+                </>
+              )}
+
+              {isLeaveSelected && (
+                <p className={styles.modalHelpText}>
+                  選択した休暇種別で休暇申請を行います。出勤・退勤・離席時間は登録されません。
+                </p>
+              )}
 
               <div className={styles.modalField}>
                 <label className={styles.modalLabel}>コメント（任意）</label>
@@ -765,7 +973,7 @@ export default function AttendanceClient() {
                   }
                   className={styles.modalTextarea}
                   rows={4}
-                  placeholder="打刻漏れのため"
+                  placeholder={isLeaveSelected ? "休暇事後申請のため" : "打刻漏れのため"}
                 />
               </div>
             </div>
@@ -795,7 +1003,7 @@ export default function AttendanceClient() {
       {requestCompleteOpen && (
         <div className={styles.modalOverlay} onClick={() => setRequestCompleteOpen(false)}>
           <div className={styles.completeModalCard} onClick={(event) => event.stopPropagation()}>
-            <h2 className={styles.modalTitle}>打刻修正申請が完了しました</h2>
+            <h2 className={styles.modalTitle}>{requestCompleteMessage}</h2>
             <div className={styles.modalActionRow}>
               <button
                 type="button"

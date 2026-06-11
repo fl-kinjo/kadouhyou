@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/app/utils/supabase/client";
-import styles from "./page.module.css";
+import styles from "./project-detail-actions.module.css";
 
 export default function ProjectDetailActions({ projectId }: { projectId: string }) {
   const supabase = createClient();
@@ -32,21 +32,14 @@ export default function ProjectDetailActions({ projectId }: { projectId: string 
   };
 
   return (
-    <div className={styles.actionWrap}>
-      <button
-        type="button"
-        onClick={deleteProject}
-        className={styles.deleteButton}
-        disabled={deleting}
-      >
+    <div className={styles.wrap}>
+      <button type="button" onClick={deleteProject} className={styles.deleteButton} disabled={deleting}>
         {deleting ? "案件を削除中" : "案件を削除する"}
       </button>
-
       <Link href={`/project/${projectId}/edit`} className={styles.editButton}>
-        案件を編集する
+        基本情報を編集する
       </Link>
-
-      {errorMsg && <p className={styles.actionErrorText}>{errorMsg}</p>}
+      {errorMsg && <p className={styles.errorText}>{errorMsg}</p>}
     </div>
   );
 }

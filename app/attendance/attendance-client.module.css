@@ -396,3 +396,40 @@
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
+
+.statusCorrectionPending {
+  background: #ffe1a6;
+  color: #805200;
+}
+
+.statusCorrectionRejected {
+  background: #ffd7e5;
+  color: #a3325d;
+}
+
+.statusCorrectionCanceled {
+  background: #e4e4e4;
+  color: #555;
+}
+
+.statusLeavePending {
+  background: #ffe1a6;
+  color: #805200;
+}
+
+.statusLeaveRejected {
+  background: #ffd7e5;
+  color: #a3325d;
+}
+
+.statusLeaveCanceled {
+  background: #e4e4e4;
+  color: #555;
+}
+
+.modalHelpText {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.7;
+}

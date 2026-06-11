@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/app/utils/supabase/server";
-import ProjectDetailTestClient from "./project-detail-test-client";
+import ProjectDetailClient from "./project-detail-client";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -37,6 +37,7 @@ type ProfileRow = {
   last_name: string | null;
   first_name: string | null;
   email: string | null;
+  status: number | null;
 };
 
 type ProjectMemberRow = {
@@ -53,22 +54,38 @@ type JobRow = {
   name: string;
 };
 
+type PartnerRow = {
+  id: string;
+  name: string;
+};
+
 type PlannedCostRow = {
   id: string;
-  category: number | null;
-  amount: number | null;
+  project_id: string;
+  category: number;
+  expense_name: string | null;
+  partner_id: string | null;
+  job_id: string | null;
+  profile_id: string | null;
   operating_person_months: number | string | null;
+  target_year_month: string;
+  amount: number | null;
 };
 
 type ActualCostRow = {
   id: string;
-  category: number | null;
+  project_id: string;
+  category: number;
+  expense_name: string | null;
+  partner_id: string | null;
+  target_year_month: string;
   amount: number | string | null;
 };
 
 type ReportRow = {
   id: string;
   profile_id: string;
+  project_id: string;
   work_date: string;
   hours: number | string | null;
 };
@@ -98,13 +115,13 @@ const STATUS_LABELS: Record<number, string> = {
   2: "営業中（中）",
   3: "営業中（低）",
   4: "営業中（最終調整）",
-  5: "確定前",
-  6: "確定",
-  7: "進行中",
-  8: "完了",
-  9: "滞留",
-  10: "プリセールス(無償)",
-  11: "社内案件(無償)",
+  5: "確定",
+  6: "進行中",
+  7: "完了",
+  8: "滞留",
+  9: "プリセールス(無償)",
+  10: "社内案件(無償)",
+  11: "失注",
 };
 
 const LABOR_COST_PER_PERSON_DAY = 35000;
@@ -194,7 +211,7 @@ function diffDaysFromToday(targetDate: string | null | undefined): number | null
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-export default async function ProjectDetailTestPage(props: PageProps) {
+export default async function ProjectDetailPage(props: PageProps) {
   const { id } = await props.params;
 
   const supabase = await createClient();
@@ -222,6 +239,7 @@ export default async function ProjectDetailTestPage(props: PageProps) {
     { data: profiles, error: profilesError },
     { data: profileJobs, error: profileJobsError },
     { data: jobs, error: jobsError },
+    { data: partners, error: partnersError },
     { data: plannedCosts, error: plannedCostsError },
     { data: actualCosts, error: actualCostsError },
     { data: reports, error: reportsError },
@@ -231,21 +249,28 @@ export default async function ProjectDetailTestPage(props: PageProps) {
     supabase.from("project_member").select("profile_id").eq("project_id", id),
     supabase
       .from("profiles_2")
-      .select("id,last_name,first_name,email")
+      .select("id,last_name,first_name,email,status")
       .order("created_at", { ascending: true }),
     supabase.from("profile_job").select("profile_id,job_id"),
     supabase.from("job").select("id,name"),
+    supabase.from("partner").select("id,name").order("name", { ascending: true }),
     supabase
       .from("project_planned_cost")
-      .select("id,category,amount,operating_person_months")
-      .eq("project_id", id),
+      .select(
+        "id,project_id,category,expense_name,partner_id,job_id,profile_id,operating_person_months,target_year_month,amount"
+      )
+      .eq("project_id", id)
+      .order("target_year_month", { ascending: true })
+      .order("created_at", { ascending: true }),
     supabase
       .from("project_actual_cost")
-      .select("id,category,amount")
-      .eq("project_id", id),
+      .select("id,project_id,category,expense_name,partner_id,target_year_month,amount")
+      .eq("project_id", id)
+      .order("target_year_month", { ascending: true })
+      .order("created_at", { ascending: true }),
     supabase
       .from("report")
-      .select("id,profile_id,work_date,hours")
+      .select("id,profile_id,project_id,work_date,hours")
       .eq("project_id", id),
     supabase
       .from("project_sales_recognition")
@@ -257,6 +282,7 @@ export default async function ProjectDetailTestPage(props: PageProps) {
   if (profilesError) throw new Error(profilesError.message);
   if (profileJobsError) throw new Error(profileJobsError.message);
   if (jobsError) throw new Error(jobsError.message);
+  if (partnersError) throw new Error(partnersError.message);
   if (plannedCostsError) throw new Error(plannedCostsError.message);
   if (actualCostsError) throw new Error(actualCostsError.message);
   if (reportsError) throw new Error(reportsError.message);
@@ -268,6 +294,7 @@ export default async function ProjectDetailTestPage(props: PageProps) {
   const memberRows = (members ?? []) as ProjectMemberRow[];
   const profileJobRows = (profileJobs ?? []) as ProfileJobRow[];
   const jobRows = (jobs ?? []) as JobRow[];
+  const partnerRows = (partners ?? []) as PartnerRow[];
   const plannedCostRows = (plannedCosts ?? []) as PlannedCostRow[];
   const actualCostRows = (actualCosts ?? []) as ActualCostRow[];
   const reportRows = (reports ?? []) as ReportRow[];
@@ -407,7 +434,7 @@ export default async function ProjectDetailTestPage(props: PageProps) {
     : null;
 
   return (
-    <ProjectDetailTestClient
+    <ProjectDetailClient
       initialData={{
         projectId: projectRow.id,
         header: {
@@ -459,6 +486,16 @@ export default async function ProjectDetailTestPage(props: PageProps) {
           currentRows,
           savedCells,
           invoiceAmount,
+        },
+        cost: {
+          startDate: projectRow.start_date,
+          endDate: projectRow.end_date,
+          plannedCosts: plannedCostRows,
+          actualCosts: actualCostRows,
+          reports: reportRows,
+          profiles: allProfiles,
+          partners: partnerRows,
+          jobs: jobRows,
         },
       }}
     />

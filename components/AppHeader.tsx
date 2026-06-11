@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -9,40 +9,41 @@ import { createClient } from "@/app/utils/supabase/client";
 const MENU_GROUPS = [
   {
     key: "attendance",
-    title: "勤怠系",
+    title: "勤怠",
     items: [
       { href: "/attendance", label: "勤怠入力" },
-      { href: "/attendance-management", label: "勤怠管理" },
       { href: "/report", label: "業務報告" },
+      { href: "/attendance-management", label: "勤怠管理", icon: true, adminOnly: true },
     ],
   },
   {
     key: "request",
-    title: "申請系",
+    title: "申請",
     items: [
       { href: "/leave-request", label: "休暇申請" },
       { href: "/expenses", label: "経費申請" },
-      { href: "/expenses-management", label: "経費管理" },
+      { href: "/expenses-management", label: "経費管理", icon: true, adminOnly: true },
     ],
   },
   {
     key: "project",
-    title: "案件系",
+    title: "案件",
     items: [
       { href: "/project", label: "案件管理" },
-      { href: "/summary", label: "案件サマリー" },
-      { href: "/summary/sales2", label: "営業サマリー" },
-      { href: "/client", label: "クライアント管理" },
-      { href: "/partner", label: "パートナー管理" },
+      { href: "/summary", label: "案件サマリー", adminOnly: true },
+      { href: "/summary/sales2", label: "営業サマリー", adminOnly: true },
+      { href: "/client", label: "クライアント管理", adminOnly: true },
+      { href: "/partner", label: "パートナー管理", adminOnly: true },
+      { href: "/project-request", label: "予定工数申請管理", icon: true, adminOnly: true },
     ],
   },
   {
     key: "general",
-    title: "総務管理系",
+    title: "総務管理",
     items: [
-      { href: "/employee", label: "社員管理" },
-      { href: "/team", label: "組織管理" },
-      { href: "/job", label: "職種管理" },
+      { href: "/employee", label: "社員管理", adminOnly: true },
+      { href: "/team", label: "組織管理", adminOnly: true },
+      { href: "/job", label: "職種管理", adminOnly: true },
     ],
   },
 ] as const;
@@ -50,6 +51,9 @@ const MENU_GROUPS = [
 export default function AppHeader() {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -57,7 +61,7 @@ export default function AppHeader() {
   const initialGroupState = useMemo(
     () =>
       MENU_GROUPS.reduce<Record<string, boolean>>((acc, group) => {
-        acc[group.key] = false;
+        acc[group.key] = true;
         return acc;
       }, {}),
     []
@@ -65,9 +69,58 @@ export default function AppHeader() {
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialGroupState);
 
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+
+        if (authError || !authData.user) {
+          setIsAdmin(false);
+          return;
+        }
+
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles_2")
+          .select("is_admin")
+          .eq("id", authData.user.id)
+          .maybeSingle();
+
+        if (profileError) {
+          setIsAdmin(false);
+          return;
+        }
+
+        setIsAdmin(profileData?.is_admin === 1);
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+
+    if (pathname !== "/login") {
+      loadProfile();
+    }
+  }, [pathname, supabase]);
+
+  const visibleMenuGroups = useMemo(() => {
+    return MENU_GROUPS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if ("adminOnly" in item && item.adminOnly) {
+          return isAdmin;
+        }
+        return true;
+      }),
+    })).filter((group) => group.items.length > 0);
+  }, [isAdmin]);
+
   if (pathname === "/login") {
     return null;
   }
+
+  const openDrawer = () => {
+    setOpenGroups(initialGroupState);
+    setOpen(true);
+  };
 
   const closeDrawer = () => setOpen(false);
 
@@ -90,7 +143,7 @@ export default function AppHeader() {
   return (
     <>
       <header style={header}>
-        <button onClick={() => setOpen(true)} style={hamburger} type="button">
+        <button onClick={openDrawer} style={hamburger} type="button">
           ☰
         </button>
       </header>
@@ -108,35 +161,40 @@ export default function AppHeader() {
         <nav style={navWrap}>
           <MenuLink href="/top" label="トップ" onClick={closeDrawer} />
 
-          {MENU_GROUPS.map((group) => {
-            const isOpen = openGroups[group.key];
+          {!authChecked ? (
+            <div style={loadingText}>メニュー読み込み中...</div>
+          ) : (
+            visibleMenuGroups.map((group) => {
+              const isOpen = openGroups[group.key];
 
-            return (
-              <div key={group.key} style={groupWrap}>
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.key)}
-                  style={groupButton}
-                >
-                  <span>{group.title}</span>
-                  <span style={groupChevron}>{isOpen ? "▾" : "▸"}</span>
-                </button>
+              return (
+                <div key={group.key} style={groupWrap}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.key)}
+                    style={groupButton}
+                  >
+                    <span>{group.title}</span>
+                    <span style={groupChevron}>{isOpen ? "▾" : "▸"}</span>
+                  </button>
 
-                {isOpen && (
-                  <div style={groupLinks}>
-                    {group.items.map((item) => (
-                      <MenuLink
-                        key={item.href}
-                        href={item.href}
-                        label={item.label}
-                        onClick={closeDrawer}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  {isOpen && (
+                    <div style={groupLinks}>
+                      {group.items.map((item) => (
+                        <MenuLink
+                          key={item.href}
+                          href={item.href}
+                          label={item.label}
+                          icon={"icon" in item ? item.icon : false}
+                          onClick={closeDrawer}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
 
           <button type="button" onClick={logout} style={logoutButton} disabled={loggingOut}>
             {loggingOut ? "ログアウト中..." : "ログアウト"}
@@ -150,15 +208,28 @@ export default function AppHeader() {
 function MenuLink({
   href,
   label,
+  icon = false,
   onClick,
 }: {
   href: string;
   label: string;
+  icon?: boolean;
   onClick?: () => void;
 }) {
   return (
     <Link href={href} style={link} onClick={onClick}>
-      {label}
+      <span style={linkInner}>
+        <span>{label}</span>
+        {icon && (
+          <Image
+            src="/image/kinturu_rogo.png"
+            alt=""
+            width={20}
+            height={20}
+            style={menuIcon}
+          />
+        )}
+      </span>
     </Link>
   );
 }
@@ -181,19 +252,6 @@ const hamburger: React.CSSProperties = {
   border: "none",
   background: "transparent",
   cursor: "pointer",
-};
-
-const logoLink: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  textDecoration: "none",
-  marginTop: 10,
-};
-
-const logoImage: React.CSSProperties = {
-  width: "auto",
-  height: 60,
-  objectFit: "contain",
 };
 
 const overlay: React.CSSProperties = {
@@ -255,6 +313,25 @@ const groupLinks: React.CSSProperties = {
 const link: React.CSSProperties = {
   textDecoration: "none",
   color: "#000",
+  fontWeight: 700,
+};
+
+const linkInner: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const menuIcon: React.CSSProperties = {
+  width: 20,
+  height: 20,
+  objectFit: "contain",
+  transform: "translateY(-1px)",
+};
+
+const loadingText: React.CSSProperties = {
+  color: "#666",
+  fontSize: 13,
   fontWeight: 700,
 };
 
