@@ -13,14 +13,14 @@ const MENU_GROUPS = [
     items: [
       { href: "/attendance", label: "勤怠入力" },
       { href: "/report", label: "業務報告" },
+      { href: "/leave-request", label: "休暇申請" },
       { href: "/attendance-management", label: "勤怠管理", icon: true, adminOnly: true },
     ],
   },
   {
     key: "request",
-    title: "申請",
+    title: "経費",
     items: [
-      { href: "/leave-request", label: "休暇申請" },
       { href: "/expenses", label: "経費申請" },
       { href: "/expenses-management", label: "経費管理", icon: true, adminOnly: true },
     ],
@@ -30,10 +30,11 @@ const MENU_GROUPS = [
     title: "案件",
     items: [
       { href: "/project", label: "案件管理" },
-      { href: "/summary", label: "案件サマリー", adminOnly: true },
-      { href: "/summary/sales2", label: "営業サマリー", adminOnly: true },
-      { href: "/client", label: "クライアント管理", adminOnly: true },
-      { href: "/partner", label: "パートナー管理", adminOnly: true },
+      { href: "/summary", label: "案件サマリー" },
+      { href: "/summary/sales2", label: "営業サマリー" },
+      { href: "/summary/client", label: "クライアント別年間実績" },
+      { href: "/client", label: "クライアント管理", icon: true, adminOnly: true },
+      { href: "/partner", label: "パートナー管理", icon: true, adminOnly: true },
       { href: "/project-request", label: "予定工数申請管理", icon: true, adminOnly: true },
     ],
   },
@@ -48,11 +49,27 @@ const MENU_GROUPS = [
   },
 ] as const;
 
+type MenuPermissionRow = {
+  menu_group_key: string;
+  menu_item_href: string | null;
+  can_view: boolean | null;
+};
+
+function menuPermissionKey(groupKey: string, itemHref = "") {
+  return `${groupKey}::${itemHref}`;
+}
+
+function matchesPath(href: string, pathname: string | null) {
+  if (!pathname) return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export default function AppHeader() {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [permissionMap, setPermissionMap] = useState<Map<string, boolean>>(new Map());
 
   const pathname = usePathname();
   const router = useRouter();
@@ -76,42 +93,83 @@ export default function AppHeader() {
 
         if (authError || !authData.user) {
           setIsAdmin(false);
+          setPermissionMap(new Map());
           return;
         }
 
-        const { data: profileData, error: profileError } = await supabase
-          .from("profiles_2")
-          .select("is_admin")
-          .eq("id", authData.user.id)
-          .maybeSingle();
+        const [{ data: profileData, error: profileError }, { data: permissionData, error: permissionError }] =
+          await Promise.all([
+            supabase
+              .from("profiles_2")
+              .select("is_admin")
+              .eq("id", authData.user.id)
+              .maybeSingle(),
+            supabase
+              .from("profile_menu_permission")
+              .select("menu_group_key,menu_item_href,can_view")
+              .eq("profile_id", authData.user.id),
+          ]);
 
         if (profileError) {
           setIsAdmin(false);
+        } else {
+          setIsAdmin(profileData?.is_admin === 1);
+        }
+
+        if (permissionError) {
+          setPermissionMap(new Map());
           return;
         }
 
-        setIsAdmin(profileData?.is_admin === 1);
+        const nextPermissionMap = new Map<string, boolean>();
+        for (const row of (permissionData ?? []) as MenuPermissionRow[]) {
+          nextPermissionMap.set(menuPermissionKey(row.menu_group_key, row.menu_item_href ?? ""), row.can_view !== false);
+        }
+        setPermissionMap(nextPermissionMap);
       } finally {
         setAuthChecked(true);
       }
     };
 
     if (pathname !== "/login") {
+      setAuthChecked(false);
       loadProfile();
     }
   }, [pathname, supabase]);
 
   const visibleMenuGroups = useMemo(() => {
-    return MENU_GROUPS.map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        if ("adminOnly" in item && item.adminOnly) {
-          return isAdmin;
-        }
-        return true;
-      }),
-    })).filter((group) => group.items.length > 0);
-  }, [isAdmin]);
+    return MENU_GROUPS.map((group) => {
+      const groupCanView = permissionMap.get(menuPermissionKey(group.key)) !== false;
+
+      return {
+        ...group,
+        items: group.items.filter((item) => {
+          if (!groupCanView) return false;
+          if ("adminOnly" in item && item.adminOnly && !isAdmin) return false;
+          return permissionMap.get(menuPermissionKey(group.key, item.href)) !== false;
+        }),
+      };
+    }).filter((group) => group.items.length > 0);
+  }, [isAdmin, permissionMap]);
+
+  const controlledMenuItem = useMemo(() => {
+    const items = MENU_GROUPS.flatMap((group) => group.items.map((item) => ({ groupKey: group.key, ...item })));
+    return [...items].sort((a, b) => b.href.length - a.href.length).find((item) => matchesPath(item.href, pathname)) ?? null;
+  }, [pathname]);
+
+  const currentPathAllowed = useMemo(() => {
+    if (!controlledMenuItem) return true;
+    return visibleMenuGroups.some((group) => group.items.some((item) => item.href === controlledMenuItem.href));
+  }, [controlledMenuItem, visibleMenuGroups]);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    if (pathname === "/login" || pathname === "/top" || pathname === "/") return;
+    if (!currentPathAllowed) {
+      setOpen(false);
+      router.replace("/top");
+    }
+  }, [authChecked, currentPathAllowed, pathname, router]);
 
   if (pathname === "/login") {
     return null;
@@ -169,11 +227,7 @@ export default function AppHeader() {
 
               return (
                 <div key={group.key} style={groupWrap}>
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.key)}
-                    style={groupButton}
-                  >
+                  <button type="button" onClick={() => toggleGroup(group.key)} style={groupButton}>
                     <span>{group.title}</span>
                     <span style={groupChevron}>{isOpen ? "▾" : "▸"}</span>
                   </button>

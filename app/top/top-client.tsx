@@ -104,9 +104,17 @@ type ProjectActualCostRow = {
   updated_at: string;
 };
 
+type AlertSource = {
+  id: string;
+  title: string;
+  description?: string;
+  href: string;
+};
+
 type AlertItem = {
   title: string;
   description: string;
+  sources: AlertSource[];
 };
 
 type AlertGroup = {
@@ -223,9 +231,12 @@ function formatNameSummary(names: string[]) {
 
 async function fetchJapaneseHolidaySetSafe() {
   try {
-    const response = await fetch("https://holidays-jp.github.io/api/v1/date.json", {
-      cache: "force-cache",
-    });
+    const response = await fetch(
+      "https://holidays-jp.github.io/api/v1/date.json",
+      {
+        cache: "force-cache",
+      },
+    );
     if (!response.ok) return new Set<string>();
     const holidayJson = (await response.json()) as Record<string, string>;
     return new Set(Object.keys(holidayJson));
@@ -252,25 +263,51 @@ export default function TopClient() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [selectedAlert, setSelectedAlert] = useState<AlertItem | null>(null);
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [attendance, setAttendance] = useState<Attendance | null>(null);
-  const [attendanceBreaks, setAttendanceBreaks] = useState<AttendanceBreak[]>([]);
-  const [attendanceMonthRows, setAttendanceMonthRows] = useState<Attendance[]>([]);
+  const [attendanceBreaks, setAttendanceBreaks] = useState<AttendanceBreak[]>(
+    [],
+  );
+  const [attendanceMonthRows, setAttendanceMonthRows] = useState<Attendance[]>(
+    [],
+  );
   const [ongoingProjects, setOngoingProjects] = useState<DisplayProject[]>([]);
-  const [unbilledProjects, setUnbilledProjects] = useState<DisplayProject[]>([]);
+  const [unbilledProjects, setUnbilledProjects] = useState<DisplayProject[]>(
+    [],
+  );
 
   const [assignedProjects, setAssignedProjects] = useState<Project[]>([]);
-  const [pendingPlannedCostApprovalProjects, setPendingPlannedCostApprovalProjects] = useState<Project[]>([]);
-  const [projectPlannedCosts, setProjectPlannedCosts] = useState<ProjectPlannedCostRow[]>([]);
+  const [
+    pendingPlannedCostApprovalProjects,
+    setPendingPlannedCostApprovalProjects,
+  ] = useState<Project[]>([]);
+  const [projectPlannedCosts, setProjectPlannedCosts] = useState<
+    ProjectPlannedCostRow[]
+  >([]);
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
-  const [approvedLeaveRows, setApprovedLeaveRows] = useState<LeaveRequestRow[]>([]);
-  const [pendingLeaveRows, setPendingLeaveRows] = useState<LeaveRequestRow[]>([]);
-  const [decisionLeaveRows, setDecisionLeaveRows] = useState<LeaveRequestRow[]>([]);
-  const [pendingCorrectionRows, setPendingCorrectionRows] = useState<AttendanceCorrectionRequestRow[]>([]);
-  const [decisionCorrectionRows, setDecisionCorrectionRows] = useState<AttendanceCorrectionRequestRow[]>([]);
-  const [pendingExpenseRows, setPendingExpenseRows] = useState<ProjectActualCostRow[]>([]);
-  const [decisionExpenseRows, setDecisionExpenseRows] = useState<ProjectActualCostRow[]>([]);
+  const [approvedLeaveRows, setApprovedLeaveRows] = useState<LeaveRequestRow[]>(
+    [],
+  );
+  const [pendingLeaveRows, setPendingLeaveRows] = useState<LeaveRequestRow[]>(
+    [],
+  );
+  const [decisionLeaveRows, setDecisionLeaveRows] = useState<LeaveRequestRow[]>(
+    [],
+  );
+  const [pendingCorrectionRows, setPendingCorrectionRows] = useState<
+    AttendanceCorrectionRequestRow[]
+  >([]);
+  const [decisionCorrectionRows, setDecisionCorrectionRows] = useState<
+    AttendanceCorrectionRequestRow[]
+  >([]);
+  const [pendingExpenseRows, setPendingExpenseRows] = useState<
+    ProjectActualCostRow[]
+  >([]);
+  const [decisionExpenseRows, setDecisionExpenseRows] = useState<
+    ProjectActualCostRow[]
+  >([]);
   const [holidaySet, setHolidaySet] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -286,7 +323,8 @@ export default function TopClient() {
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
 
       const userId = authData.user?.id;
@@ -305,7 +343,8 @@ export default function TopClient() {
       const prevWeekStartKey = getTodayDateString(prevWeekStart);
       const prevWeekEndKey = getTodayDateString(prevWeekEnd);
 
-      const alertRangeStart = currentMonthStart <= prevWeekStart ? currentMonthStart : prevWeekStart;
+      const alertRangeStart =
+        currentMonthStart <= prevWeekStart ? currentMonthStart : prevWeekStart;
       const alertRangeStartKey = getTodayDateString(alertRangeStart);
 
       const decisionSince = addDays(today, -14).toISOString();
@@ -376,12 +415,14 @@ export default function TopClient() {
         supabase
           .from("project")
           .select(
-            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status"
+            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status",
           )
           .order("updated_at", { ascending: false }),
         supabase.from("project_member").select("project_id,profile_id"),
         supabase.from("client").select("id,name"),
-        supabase.from("project_planned_cost").select("project_id,operating_person_months,amount"),
+        supabase
+          .from("project_planned_cost")
+          .select("project_id,operating_person_months,amount"),
         supabase
           .from("report")
           .select("work_date,hours")
@@ -390,7 +431,9 @@ export default function TopClient() {
           .lte("work_date", prevWeekEndKey),
         supabase
           .from("leave_request")
-          .select("id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at")
+          .select(
+            "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at",
+          )
           .eq("profile_id", userId)
           .eq("approval_status", 1)
           .gte("work_date", alertRangeStartKey)
@@ -398,24 +441,32 @@ export default function TopClient() {
         isAdmin
           ? supabase
               .from("leave_request")
-              .select("id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at")
+              .select(
+                "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at",
+              )
               .eq("approval_status", 0)
           : emptyLeaveResult,
         supabase
           .from("leave_request")
-          .select("id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at")
+          .select(
+            "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at",
+          )
           .eq("profile_id", userId)
           .in("approval_status", [1, 2])
           .gte("updated_at", decisionSince),
         isAdmin
           ? supabase
               .from("attendance_correction_request")
-              .select("id,profile_id,work_date,approval_status,requested_at,reviewed_at")
+              .select(
+                "id,profile_id,work_date,approval_status,requested_at,reviewed_at",
+              )
               .eq("approval_status", 0)
           : emptyCorrectionResult,
         supabase
           .from("attendance_correction_request")
-          .select("id,profile_id,work_date,approval_status,requested_at,reviewed_at")
+          .select(
+            "id,profile_id,work_date,approval_status,requested_at,reviewed_at",
+          )
           .eq("profile_id", userId)
           .in("approval_status", [1, 2])
           .not("reviewed_at", "is", null)
@@ -423,12 +474,16 @@ export default function TopClient() {
         isAdmin
           ? supabase
               .from("project_actual_cost")
-              .select("id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at")
+              .select(
+                "id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at",
+              )
               .eq("application_status", 0)
           : emptyExpenseResult,
         supabase
           .from("project_actual_cost")
-          .select("id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at")
+          .select(
+            "id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at",
+          )
           .eq("profile_id", userId)
           .in("application_status", [1, 2])
           .gte("updated_at", decisionSince),
@@ -446,14 +501,17 @@ export default function TopClient() {
       if (approvedLeaveError) throw new Error(approvedLeaveError.message);
       if (pendingLeaveError) throw new Error(pendingLeaveError.message);
       if (decisionLeaveError) throw new Error(decisionLeaveError.message);
-      if (pendingCorrectionError) throw new Error(pendingCorrectionError.message);
-      if (decisionCorrectionError) throw new Error(decisionCorrectionError.message);
+      if (pendingCorrectionError)
+        throw new Error(pendingCorrectionError.message);
+      if (decisionCorrectionError)
+        throw new Error(decisionCorrectionError.message);
       if (pendingExpenseError) throw new Error(pendingExpenseError.message);
       if (decisionExpenseError) throw new Error(decisionExpenseError.message);
 
       const todayAttendance = (attendanceData ?? null) as Attendance | null;
       const monthAttendance = (attendanceMonthData ?? []) as Attendance[];
-      const todayAttendanceBreaks = (attendanceBreakData ?? []) as AttendanceBreak[];
+      const todayAttendanceBreaks = (attendanceBreakData ??
+        []) as AttendanceBreak[];
       const projects = (projectsData ?? []) as Project[];
       const projectMembers = (projectMembersData ?? []) as ProjectMember[];
       const clients = (clientsData ?? []) as ClientRow[];
@@ -462,42 +520,67 @@ export default function TopClient() {
       setAttendance(todayAttendance);
       setAttendanceMonthRows(monthAttendance);
       setAttendanceBreaks(todayAttendanceBreaks);
-      setProjectPlannedCosts((plannedCostsData ?? []) as ProjectPlannedCostRow[]);
+      setProjectPlannedCosts(
+        (plannedCostsData ?? []) as ProjectPlannedCostRow[],
+      );
       setReportRows((reportData ?? []) as ReportRow[]);
       setApprovedLeaveRows((approvedLeaveData ?? []) as LeaveRequestRow[]);
       setPendingLeaveRows((pendingLeaveData ?? []) as LeaveRequestRow[]);
       setDecisionLeaveRows((decisionLeaveData ?? []) as LeaveRequestRow[]);
-      setPendingCorrectionRows((pendingCorrectionData ?? []) as AttendanceCorrectionRequestRow[]);
-      setDecisionCorrectionRows((decisionCorrectionData ?? []) as AttendanceCorrectionRequestRow[]);
-      setPendingExpenseRows((pendingExpenseData ?? []) as ProjectActualCostRow[]);
-      setDecisionExpenseRows((decisionExpenseData ?? []) as ProjectActualCostRow[]);
+      setPendingCorrectionRows(
+        (pendingCorrectionData ?? []) as AttendanceCorrectionRequestRow[],
+      );
+      setDecisionCorrectionRows(
+        (decisionCorrectionData ?? []) as AttendanceCorrectionRequestRow[],
+      );
+      setPendingExpenseRows(
+        (pendingExpenseData ?? []) as ProjectActualCostRow[],
+      );
+      setDecisionExpenseRows(
+        (decisionExpenseData ?? []) as ProjectActualCostRow[],
+      );
       setHolidaySet(holidayData);
 
-      const clientMap = new Map(clients.map((client) => [client.id, client.name]));
+      const clientMap = new Map(
+        clients.map((client) => [client.id, client.name]),
+      );
       const memberProjectIds = new Set(
-        projectMembers.filter((row) => row.profile_id === userId).map((row) => row.project_id)
+        projectMembers
+          .filter((row) => row.profile_id === userId)
+          .map((row) => row.project_id),
       );
 
       const nextAssignedProjects = projects.filter(
-        (project) => project.project_manager_id === userId || memberProjectIds.has(project.id)
+        (project) =>
+          project.project_manager_id === userId ||
+          memberProjectIds.has(project.id),
       );
 
-      const assignedDisplayProjects: DisplayProject[] = nextAssignedProjects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        client_name: project.client_id ? clientMap.get(project.client_id) ?? "-" : "-",
-        status: project.status,
-        invoice_amount: project.invoice_amount,
-        invoice_month: project.invoice_month,
-        payment_due_date: project.payment_due_date,
-        invoice: project.invoice,
-      }));
+      const assignedDisplayProjects: DisplayProject[] =
+        nextAssignedProjects.map((project) => ({
+          id: project.id,
+          name: project.name,
+          client_name: project.client_id
+            ? (clientMap.get(project.client_id) ?? "-")
+            : "-",
+          status: project.status,
+          invoice_amount: project.invoice_amount,
+          invoice_month: project.invoice_month,
+          payment_due_date: project.payment_due_date,
+          invoice: project.invoice,
+        }));
 
       setAssignedProjects(nextAssignedProjects);
-      setOngoingProjects(assignedDisplayProjects.filter((project) => project.status === 6));
-      setUnbilledProjects(assignedDisplayProjects.filter((project) => isBlank(project.invoice)));
+      setOngoingProjects(
+        assignedDisplayProjects.filter((project) => project.status === 6),
+      );
+      setUnbilledProjects(
+        assignedDisplayProjects.filter((project) => isBlank(project.invoice)),
+      );
       setPendingPlannedCostApprovalProjects(
-        projects.filter((project) => project.planned_cost_approval_status === 1)
+        projects.filter(
+          (project) => project.planned_cost_approval_status === 1,
+        ),
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -511,18 +594,23 @@ export default function TopClient() {
   }, [load]);
 
   const hasOpenBreak = useMemo(
-    () => attendanceBreaks.some((row) => row.break_out_time && !row.break_in_time),
-    [attendanceBreaks]
+    () =>
+      attendanceBreaks.some((row) => row.break_out_time && !row.break_in_time),
+    [attendanceBreaks],
   );
 
   const breakOutHistoryText = useMemo(() => {
     if (attendanceBreaks.length === 0) return "--:--:--";
-    return attendanceBreaks.map((row) => formatTime(row.break_out_time)).join(" / ");
+    return attendanceBreaks
+      .map((row) => formatTime(row.break_out_time))
+      .join(" / ");
   }, [attendanceBreaks]);
 
   const breakInHistoryText = useMemo(() => {
     if (attendanceBreaks.length === 0) return "--:--:--";
-    return attendanceBreaks.map((row) => formatTime(row.break_in_time)).join(" / ");
+    return attendanceBreaks
+      .map((row) => formatTime(row.break_in_time))
+      .join(" / ");
   }, [attendanceBreaks]);
 
   const saveAttendanceField = async (field: "start_time" | "end_time") => {
@@ -530,7 +618,8 @@ export default function TopClient() {
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
 
       const userId = authData.user?.id;
@@ -589,7 +678,8 @@ export default function TopClient() {
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
 
       const userId = authData.user?.id;
@@ -630,14 +720,17 @@ export default function TopClient() {
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
 
       const userId = authData.user?.id;
       if (!userId) throw new Error("ログインユーザーを取得できません。");
 
       const nowText = formatNow(new Date());
-      const openBreak = [...attendanceBreaks].reverse().find((row) => !row.break_in_time);
+      const openBreak = [...attendanceBreaks]
+        .reverse()
+        .find((row) => !row.break_in_time);
 
       if (!attendance?.start_time) {
         throw new Error("先に出勤打刻を行ってください。");
@@ -675,9 +768,21 @@ export default function TopClient() {
   }, [attendance, hasOpenBreak]);
 
   const canStart = !saving && !attendance?.start_time;
-  const canEnd = !saving && !!attendance?.start_time && !attendance?.end_time && !hasOpenBreak;
-  const canBreakOut = !saving && !!attendance?.start_time && !attendance?.end_time && !hasOpenBreak;
-  const canBreakIn = !saving && !!attendance?.start_time && !attendance?.end_time && hasOpenBreak;
+  const canEnd =
+    !saving &&
+    !!attendance?.start_time &&
+    !attendance?.end_time &&
+    !hasOpenBreak;
+  const canBreakOut =
+    !saving &&
+    !!attendance?.start_time &&
+    !attendance?.end_time &&
+    !hasOpenBreak;
+  const canBreakIn =
+    !saving &&
+    !!attendance?.start_time &&
+    !attendance?.end_time &&
+    hasOpenBreak;
 
   const finalAlertGroups = useMemo<AlertGroup[]>(() => {
     const today = new Date();
@@ -688,19 +793,42 @@ export default function TopClient() {
     const prevWeekStart = addDays(currentWeekStart, -7);
     const prevWeekEnd = addDays(prevWeekStart, 6);
 
-    const leaveMap = new Map(approvedLeaveRows.map((row) => [row.work_date, row]));
+    const leaveMap = new Map(
+      approvedLeaveRows.map((row) => [row.work_date, row]),
+    );
 
     const reportHoursByDate = new Map<string, number>();
     for (const row of reportRows) {
-      reportHoursByDate.set(row.work_date, (reportHoursByDate.get(row.work_date) ?? 0) + toNumber(row.hours));
+      reportHoursByDate.set(
+        row.work_date,
+        (reportHoursByDate.get(row.work_date) ?? 0) + toNumber(row.hours),
+      );
     }
 
     const projectItems: AlertItem[] = [];
     const workItems: AlertItem[] = [];
     const requestItems: AlertItem[] = [];
 
+    const createProjectSource = (
+      project: Project,
+      prefix: string,
+    ): AlertSource => ({
+      id: `${prefix}-${project.id}`,
+      title: project.name,
+      description: [
+        project.status != null
+          ? `状態: ${STATUS_LABELS[project.status] ?? String(project.status)}`
+          : null,
+        `請求月: ${formatMonth(project.invoice_month)}`,
+        `請求額: ${formatCurrency(project.invoice_amount)}`,
+      ]
+        .filter(Boolean)
+        .join(" / "),
+      href: `/project/${project.id}`,
+    });
+
     const invoiceRequiredProjects = assignedProjects.filter((project) =>
-      [5, 6, 7].includes(project.status ?? -1)
+      [5, 6, 7].includes(project.status ?? -1),
     );
 
     const currentMonthFirstDay = getMonthStart(today);
@@ -708,13 +836,20 @@ export default function TopClient() {
       if (!project.invoice_month) return false;
       const invoiceMonthDate = new Date(`${project.invoice_month}T00:00:00`);
       if (Number.isNaN(invoiceMonthDate.getTime())) return false;
-      return invoiceMonthDate < currentMonthFirstDay && isBlank(project.invoice);
+      return (
+        invoiceMonthDate < currentMonthFirstDay && isBlank(project.invoice)
+      );
     });
 
     if (overdueInvoiceProjects.length > 0) {
       projectItems.push({
         title: `請求月超過・請求書未アップが${overdueInvoiceProjects.length}件あります`,
-        description: formatNameSummary(overdueInvoiceProjects.map((project) => project.name)),
+        description: formatNameSummary(
+          overdueInvoiceProjects.map((project) => project.name),
+        ),
+        sources: overdueInvoiceProjects.map((project) =>
+          createProjectSource(project, "overdue-invoice"),
+        ),
       });
     }
 
@@ -723,30 +858,40 @@ export default function TopClient() {
         .filter(
           (row) =>
             row.project_id &&
-            (toNumber(row.operating_person_months) > 0 || row.amount != null)
+            (toNumber(row.operating_person_months) > 0 || row.amount != null),
         )
-        .map((row) => row.project_id)
+        .map((row) => row.project_id),
     );
 
     const noPlannedCostProjects = invoiceRequiredProjects.filter(
-      (project) => !plannedCostProjectSet.has(project.id)
+      (project) => !plannedCostProjectSet.has(project.id),
     );
 
     if (noPlannedCostProjects.length > 0) {
       projectItems.push({
         title: `予定工数未入力の案件が${noPlannedCostProjects.length}件あります`,
-        description: formatNameSummary(noPlannedCostProjects.map((project) => project.name)),
+        description: formatNameSummary(
+          noPlannedCostProjects.map((project) => project.name),
+        ),
+        sources: noPlannedCostProjects.map((project) =>
+          createProjectSource(project, "no-planned-cost"),
+        ),
       });
     }
 
     const noInvoiceAmountProjects = invoiceRequiredProjects.filter(
-      (project) => project.invoice_amount == null
+      (project) => project.invoice_amount == null,
     );
 
     if (noInvoiceAmountProjects.length > 0) {
       projectItems.push({
         title: `請求金額未入力の案件が${noInvoiceAmountProjects.length}件あります`,
-        description: formatNameSummary(noInvoiceAmountProjects.map((project) => project.name)),
+        description: formatNameSummary(
+          noInvoiceAmountProjects.map((project) => project.name),
+        ),
+        sources: noInvoiceAmountProjects.map((project) =>
+          createProjectSource(project, "no-invoice-amount"),
+        ),
       });
     }
 
@@ -755,7 +900,9 @@ export default function TopClient() {
     while (reportCursor <= prevWeekEnd) {
       const dateKey = getTodayDateString(reportCursor);
       const leave = leaveMap.get(dateKey);
-      const shouldSkip = !isBusinessDay(reportCursor, holidaySet) || isFullDayLeave(leave?.leave_type);
+      const shouldSkip =
+        !isBusinessDay(reportCursor, holidaySet) ||
+        isFullDayLeave(leave?.leave_type);
 
       if (!shouldSkip && (reportHoursByDate.get(dateKey) ?? 0) <= 0) {
         missingReportDates.push(dateKey);
@@ -768,16 +915,26 @@ export default function TopClient() {
       workItems.push({
         title: `先週分の業務報告未入力が${missingReportDates.length}日あります`,
         description: formatDateArraySummary(missingReportDates),
+        sources: missingReportDates.map((dateKey) => ({
+          id: `missing-report-${dateKey}`,
+          title: formatDateSlash(dateKey),
+          description: "業務報告未入力",
+          href: `/report?date=${dateKey}`,
+        })),
       });
     }
 
-    const attendanceMap = new Map(attendanceMonthRows.map((row) => [row.work_date, row]));
+    const attendanceMap = new Map(
+      attendanceMonthRows.map((row) => [row.work_date, row]),
+    );
     const missingAttendanceDates: string[] = [];
     let attendanceCursor = new Date(currentMonthStart);
     while (attendanceCursor <= yesterday) {
       const dateKey = getTodayDateString(attendanceCursor);
       const leave = leaveMap.get(dateKey);
-      const shouldSkip = !isBusinessDay(attendanceCursor, holidaySet) || isFullDayLeave(leave?.leave_type);
+      const shouldSkip =
+        !isBusinessDay(attendanceCursor, holidaySet) ||
+        isFullDayLeave(leave?.leave_type);
       const dayAttendance = attendanceMap.get(dateKey);
 
       if (
@@ -794,71 +951,198 @@ export default function TopClient() {
       workItems.push({
         title: `勤怠の未入力が${missingAttendanceDates.length}日あります`,
         description: `当月過去分: ${formatDateArraySummary(missingAttendanceDates)}`,
+        sources: missingAttendanceDates.map((dateKey) => ({
+          id: `missing-attendance-${dateKey}`,
+          title: formatDateSlash(dateKey),
+          description: "勤怠未入力",
+          href: `/attendance?date=${dateKey}`,
+        })),
       });
     }
 
     if (profile?.is_admin === 1) {
-      const pendingLeaveGroupCount = new Set(
-        pendingLeaveRows.map((row) => row.request_group_id)
-      ).size;
-      const pendingCorrectionCount = pendingCorrectionRows.length;
-      const pendingExpenseGroupCount = new Set(
-        pendingExpenseRows.map((row) => row.request_group_id ?? row.id)
-      ).size;
+      const pendingLeaveGroups = new Map<string, LeaveRequestRow[]>();
+      for (const row of pendingLeaveRows) {
+        const key = row.request_group_id;
+        pendingLeaveGroups.set(key, [
+          ...(pendingLeaveGroups.get(key) ?? []),
+          row,
+        ]);
+      }
 
-      if (pendingLeaveGroupCount > 0) {
+      const pendingLeaveSources: AlertSource[] = Array.from(
+        pendingLeaveGroups.entries(),
+      ).map(([groupId, rows]) => {
+        const dateKeys = Array.from(
+          new Set(rows.map((row) => row.work_date)),
+        ).sort();
+        return {
+          id: `pending-leave-${groupId}`,
+          title: `休暇申請 ${formatDateArraySummary(dateKeys)}`,
+          description: "未対応",
+          href: "/attendance-management",
+        };
+      });
+
+      const pendingCorrectionSources: AlertSource[] = pendingCorrectionRows.map(
+        (row) => ({
+          id: `pending-correction-${row.id}`,
+          title: `打刻変更申請 ${formatDateSlash(row.work_date)}`,
+          description: "未対応",
+          href: "/attendance-management",
+        }),
+      );
+
+      const pendingExpenseGroups = new Map<string, ProjectActualCostRow[]>();
+      for (const row of pendingExpenseRows) {
+        const key = row.request_group_id ?? row.id;
+        pendingExpenseGroups.set(key, [
+          ...(pendingExpenseGroups.get(key) ?? []),
+          row,
+        ]);
+      }
+
+      const pendingExpenseSources: AlertSource[] = Array.from(
+        pendingExpenseGroups.entries(),
+      ).map(([groupId, rows]) => {
+        const first = rows[0];
+        return {
+          id: `pending-expense-${groupId}`,
+          title:
+            first?.purpose?.trim() ||
+            `経費申請 ${formatDateSlash(first?.expense_date ?? null)}`,
+          description: [
+            formatDateSlash(first?.expense_date ?? null),
+            formatCurrency(first?.amount ?? null),
+          ].join(" / "),
+          href: "/expenses-management",
+        };
+      });
+
+      if (pendingLeaveSources.length > 0) {
         requestItems.push({
-          title: `休暇申請の未対応が${pendingLeaveGroupCount}件あります`,
+          title: `休暇申請の未対応が${pendingLeaveSources.length}件あります`,
           description: "管理者対応が必要です。",
+          sources: pendingLeaveSources,
         });
       }
 
-      if (pendingCorrectionCount > 0) {
+      if (pendingCorrectionSources.length > 0) {
         requestItems.push({
-          title: `打刻変更申請の未対応が${pendingCorrectionCount}件あります`,
+          title: `打刻変更申請の未対応が${pendingCorrectionSources.length}件あります`,
           description: "管理者対応が必要です。",
+          sources: pendingCorrectionSources,
         });
       }
 
-      if (pendingExpenseGroupCount > 0) {
+      if (pendingExpenseSources.length > 0) {
         requestItems.push({
-          title: `経費申請の未対応が${pendingExpenseGroupCount}件あります`,
+          title: `経費申請の未対応が${pendingExpenseSources.length}件あります`,
           description: "管理者対応が必要です。",
+          sources: pendingExpenseSources,
         });
       }
 
       if (pendingPlannedCostApprovalProjects.length > 0) {
         requestItems.push({
           title: `予定工数確認依頼の未対応が${pendingPlannedCostApprovalProjects.length}件あります`,
-          description: formatNameSummary(pendingPlannedCostApprovalProjects.map((project) => project.name)),
+          description: formatNameSummary(
+            pendingPlannedCostApprovalProjects.map((project) => project.name),
+          ),
+          sources: pendingPlannedCostApprovalProjects.map((project) => ({
+            id: `pending-planned-cost-approval-${project.id}`,
+            title: project.name,
+            description: [
+              project.status != null
+                ? `状態: ${STATUS_LABELS[project.status] ?? String(project.status)}`
+                : null,
+              `請求月: ${formatMonth(project.invoice_month)}`,
+              `請求額: ${formatCurrency(project.invoice_amount)}`,
+            ]
+              .filter(Boolean)
+              .join(" / "),
+            href: "/project-request",
+          })),
         });
       }
     }
 
-    const approvedLeaveCount = decisionLeaveRows.filter((row) => row.approval_status === 1).length;
-    const rejectedLeaveCount = decisionLeaveRows.filter((row) => row.approval_status === 2).length;
-    if (approvedLeaveCount + rejectedLeaveCount > 0) {
+    const approvedLeaveRowsForNotice = decisionLeaveRows.filter(
+      (row) => row.approval_status === 1,
+    );
+    const rejectedLeaveRowsForNotice = decisionLeaveRows.filter(
+      (row) => row.approval_status === 2,
+    );
+    if (
+      approvedLeaveRowsForNotice.length + rejectedLeaveRowsForNotice.length >
+      0
+    ) {
       requestItems.push({
-        title: `休暇申請の承認/否認通知が${approvedLeaveCount + rejectedLeaveCount}件あります`,
-        description: `承認 ${approvedLeaveCount}件 / 否認 ${rejectedLeaveCount}件`,
+        title: `休暇申請の承認/否認通知が${approvedLeaveRowsForNotice.length + rejectedLeaveRowsForNotice.length}件あります`,
+        description: `承認 ${approvedLeaveRowsForNotice.length}件 / 否認 ${rejectedLeaveRowsForNotice.length}件`,
+        sources: [
+          ...approvedLeaveRowsForNotice,
+          ...rejectedLeaveRowsForNotice,
+        ].map((row) => ({
+          id: `decision-leave-${row.id}`,
+          title: `休暇申請 ${formatDateSlash(row.work_date)}`,
+          description: row.approval_status === 1 ? "承認済み" : "否認",
+          href: "/leave-request",
+        })),
       });
     }
 
-    const approvedCorrectionCount = decisionCorrectionRows.filter((row) => row.approval_status === 1).length;
-    const rejectedCorrectionCount = decisionCorrectionRows.filter((row) => row.approval_status === 2).length;
-    if (approvedCorrectionCount + rejectedCorrectionCount > 0) {
+    const approvedCorrectionRowsForNotice = decisionCorrectionRows.filter(
+      (row) => row.approval_status === 1,
+    );
+    const rejectedCorrectionRowsForNotice = decisionCorrectionRows.filter(
+      (row) => row.approval_status === 2,
+    );
+    if (
+      approvedCorrectionRowsForNotice.length +
+        rejectedCorrectionRowsForNotice.length >
+      0
+    ) {
       requestItems.push({
-        title: `打刻変更申請の承認/否認通知が${approvedCorrectionCount + rejectedCorrectionCount}件あります`,
-        description: `承認 ${approvedCorrectionCount}件 / 否認 ${rejectedCorrectionCount}件`,
+        title: `打刻変更申請の承認/否認通知が${approvedCorrectionRowsForNotice.length + rejectedCorrectionRowsForNotice.length}件あります`,
+        description: `承認 ${approvedCorrectionRowsForNotice.length}件 / 否認 ${rejectedCorrectionRowsForNotice.length}件`,
+        sources: [
+          ...approvedCorrectionRowsForNotice,
+          ...rejectedCorrectionRowsForNotice,
+        ].map((row) => ({
+          id: `decision-correction-${row.id}`,
+          title: `打刻変更申請 ${formatDateSlash(row.work_date)}`,
+          description: row.approval_status === 1 ? "承認済み" : "否認",
+          href: "/attendance",
+        })),
       });
     }
 
-    const approvedExpenseCount = decisionExpenseRows.filter((row) => row.application_status === 1).length;
-    const rejectedExpenseCount = decisionExpenseRows.filter((row) => row.application_status === 2).length;
-    if (approvedExpenseCount + rejectedExpenseCount > 0) {
+    const approvedExpenseRowsForNotice = decisionExpenseRows.filter(
+      (row) => row.application_status === 1,
+    );
+    const rejectedExpenseRowsForNotice = decisionExpenseRows.filter(
+      (row) => row.application_status === 2,
+    );
+    if (
+      approvedExpenseRowsForNotice.length +
+        rejectedExpenseRowsForNotice.length >
+      0
+    ) {
       requestItems.push({
-        title: `経費申請の承認/否認通知が${approvedExpenseCount + rejectedExpenseCount}件あります`,
-        description: `承認 ${approvedExpenseCount}件 / 否認 ${rejectedExpenseCount}件`,
+        title: `経費申請の承認/否認通知が${approvedExpenseRowsForNotice.length + rejectedExpenseRowsForNotice.length}件あります`,
+        description: `承認 ${approvedExpenseRowsForNotice.length}件 / 否認 ${rejectedExpenseRowsForNotice.length}件`,
+        sources: [
+          ...approvedExpenseRowsForNotice,
+          ...rejectedExpenseRowsForNotice,
+        ].map((row) => ({
+          id: `decision-expense-${row.id}`,
+          title:
+            row.purpose?.trim() ||
+            `経費申請 ${formatDateSlash(row.expense_date)}`,
+          description: `${row.application_status === 1 ? "承認済み" : "否認"} / ${formatCurrency(row.amount)}`,
+          href: "/expenses",
+        })),
       });
     }
 
@@ -888,7 +1172,7 @@ export default function TopClient() {
 
   const totalAlertCount = useMemo(
     () => finalAlertGroups.reduce((sum, group) => sum + group.items.length, 0),
-    [finalAlertGroups]
+    [finalAlertGroups],
   );
 
   return (
@@ -913,11 +1197,15 @@ export default function TopClient() {
           <div className={styles.attendanceCenter}>
             <div className={styles.timeRow}>
               <span className={styles.timeLabel}>出勤時刻</span>
-              <span className={styles.timeValue}>{formatTime(attendance?.start_time ?? null)}</span>
+              <span className={styles.timeValue}>
+                {formatTime(attendance?.start_time ?? null)}
+              </span>
             </div>
             <div className={styles.timeRow}>
               <span className={styles.timeLabel}>退勤時刻</span>
-              <span className={styles.timeValue}>{formatTime(attendance?.end_time ?? null)}</span>
+              <span className={styles.timeValue}>
+                {formatTime(attendance?.end_time ?? null)}
+              </span>
             </div>
             <div className={styles.timeRow}>
               <span className={styles.timeLabel}>退出履歴</span>
@@ -985,7 +1273,9 @@ export default function TopClient() {
             {loading ? (
               <div className={styles.alertEmpty}>読み込み中...</div>
             ) : finalAlertGroups.length === 0 ? (
-              <div className={styles.alertEmpty}>現在アラートはありません。</div>
+              <div className={styles.alertEmpty}>
+                現在アラートはありません。
+              </div>
             ) : (
               <div className={styles.alertGroupList}>
                 {finalAlertGroups.map((group) => (
@@ -993,10 +1283,22 @@ export default function TopClient() {
                     <div className={styles.alertGroupTitle}>{group.title}</div>
                     <div className={styles.alertItemList}>
                       {group.items.map((item, index) => (
-                        <div key={`${group.key}-${index}`} className={styles.alertItem}>
-                          <div className={styles.alertItemTitle}>{item.title}</div>
-                          <div className={styles.alertItemDescription}>{item.description}</div>
-                        </div>
+                        <button
+                          key={`${group.key}-${index}`}
+                          type="button"
+                          className={styles.alertItem}
+                          onClick={() => setSelectedAlert(item)}
+                        >
+                          <span className={styles.alertItemTitle}>
+                            {item.title}
+                          </span>
+                          <span className={styles.alertItemDescription}>
+                            {item.description}
+                          </span>
+                          <span className={styles.alertItemHint}>
+                            クリックして一覧を表示
+                          </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -1035,12 +1337,20 @@ export default function TopClient() {
                 ongoingProjects.map((project) => (
                   <tr key={project.id}>
                     <td>
-                      <Link href={`/project/${project.id}`} className={styles.projectLink}>
+                      <Link
+                        href={`/project/${project.id}`}
+                        className={styles.projectLink}
+                      >
                         {project.name}
                       </Link>
                     </td>
                     <td>{project.client_name}</td>
-                    <td>{project.status != null ? (STATUS_LABELS[project.status] ?? String(project.status)) : "-"}</td>
+                    <td>
+                      {project.status != null
+                        ? (STATUS_LABELS[project.status] ??
+                          String(project.status))
+                        : "-"}
+                    </td>
                     <td>{formatCurrency(project.invoice_amount)}</td>
                     <td>{formatMonth(project.invoice_month)}</td>
                     <td>{project.payment_due_date ?? "-"}</td>
@@ -1081,12 +1391,20 @@ export default function TopClient() {
                 unbilledProjects.map((project) => (
                   <tr key={project.id}>
                     <td>
-                      <Link href={`/project/${project.id}`} className={styles.projectLink}>
+                      <Link
+                        href={`/project/${project.id}`}
+                        className={styles.projectLink}
+                      >
                         {project.name}
                       </Link>
                     </td>
                     <td>{project.client_name}</td>
-                    <td>{project.status != null ? (STATUS_LABELS[project.status] ?? String(project.status)) : "-"}</td>
+                    <td>
+                      {project.status != null
+                        ? (STATUS_LABELS[project.status] ??
+                          String(project.status))
+                        : "-"}
+                    </td>
                     <td>{formatCurrency(project.invoice_amount)}</td>
                     <td>{formatMonth(project.invoice_month)}</td>
                     <td>{project.payment_due_date ?? "-"}</td>
@@ -1098,6 +1416,60 @@ export default function TopClient() {
           </table>
         </div>
       </section>
+
+      {selectedAlert && (
+        <div
+          className={styles.modalOverlay}
+          role="presentation"
+          onClick={() => setSelectedAlert(null)}
+        >
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="alert-source-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <div>
+                <h2 id="alert-source-title" className={styles.modalTitle}>
+                  {selectedAlert.title}
+                </h2>
+                <p className={styles.modalDescription}>
+                  {selectedAlert.description}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.modalCloseButton}
+                onClick={() => setSelectedAlert(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className={styles.alertSourceList}>
+              {selectedAlert.sources.map((source) => (
+                <Link
+                  key={source.id}
+                  href={source.href}
+                  className={styles.alertSourceLink}
+                  onClick={() => setSelectedAlert(null)}
+                >
+                  <span className={styles.alertSourceTitle}>
+                    {source.title}
+                  </span>
+                  {source.description && (
+                    <span className={styles.alertSourceDescription}>
+                      {source.description}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

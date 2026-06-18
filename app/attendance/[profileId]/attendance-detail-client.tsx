@@ -15,6 +15,14 @@ type AttendanceRow = {
   break_in_time: string | null;
 };
 
+type AttendanceBreakRow = {
+  id: string;
+  profile_id: string;
+  work_date: string;
+  break_out_time: string;
+  break_in_time: string | null;
+};
+
 type LeaveRequestRow = {
   id: string;
   profile_id: string;
@@ -39,6 +47,8 @@ type DayRow = {
   breakOutTime: string | null;
   breakInTime: string | null;
   endTime: string | null;
+  awayMinutes: number | null;
+  breakRows: AttendanceBreakRow[];
   workMinutes: number | null;
   overtimeMinutes: number | null;
   statusLabel: string;
@@ -104,6 +114,21 @@ function parseTimeToMinutes(value: string | null) {
   return hh * 60 + mm;
 }
 
+function getLunchBreakMinutes(startTime: string | null, endTime: string | null) {
+  const start = parseTimeToMinutes(startTime);
+  const end = parseTimeToMinutes(endTime);
+
+  if (start == null || end == null || end <= start) return 0;
+
+  const lunchStart = 12 * 60;
+  const lunchEnd = 13 * 60;
+
+  const overlapStart = Math.max(start, lunchStart);
+  const overlapEnd = Math.min(end, lunchEnd);
+
+  return Math.max(0, overlapEnd - overlapStart);
+}
+
 function formatDuration(minutes: number | null) {
   if (minutes == null) return "-";
   const safe = Math.max(0, minutes);
@@ -119,18 +144,20 @@ function formatSummaryDuration(minutes: number) {
   return `${hh}:${mm}`;
 }
 
-function getWorkedMinutes(startTime: string | null, endTime: string | null) {
+function getWorkedMinutes(startTime: string | null, endTime: string | null, awayMinutes: number | null) {
   const start = parseTimeToMinutes(startTime);
   const end = parseTimeToMinutes(endTime);
   if (start == null || end == null || end < start) return null;
-  return Math.max(0, end - start - 60);
+
+  const away = Math.max(0, awayMinutes ?? 0);
+  const lunchBreak = getLunchBreakMinutes(startTime, endTime);
+
+  return Math.max(0, end - start - lunchBreak - away);
 }
 
-function getOvertimeMinutes(startTime: string | null, endTime: string | null) {
-  const start = parseTimeToMinutes(startTime);
-  const end = parseTimeToMinutes(endTime);
-  if (start == null || end == null || end < start) return null;
-  return Math.max(0, end - start - 9 * 60);
+function getOvertimeMinutes(workMinutes: number | null) {
+  if (workMinutes == null) return null;
+  return Math.max(0, workMinutes - 8 * 60);
 }
 
 function fullName(profile: ProfileRow | null) {
@@ -176,6 +203,71 @@ function getStatusInfo(params: {
   return { label: "未入力", type: "missing" as const };
 }
 
+function getAwayMinutesByDate(rows: AttendanceBreakRow[]) {
+  const map = new Map<string, number>();
+
+  for (const row of rows) {
+    const out = parseTimeToMinutes(row.break_out_time);
+    const back = parseTimeToMinutes(row.break_in_time);
+    if (out == null || back == null || back < out) continue;
+
+    map.set(row.work_date, (map.get(row.work_date) ?? 0) + (back - out));
+  }
+
+  return map;
+}
+
+function getBreakRowsByDate(rows: AttendanceBreakRow[]) {
+  const map = new Map<string, AttendanceBreakRow[]>();
+
+  for (const row of rows) {
+    const current = map.get(row.work_date) ?? [];
+    current.push(row);
+    map.set(row.work_date, current);
+  }
+
+  return map;
+}
+
+function AwayDurationCell({
+  breakRows,
+  awayMinutes,
+}: {
+  breakRows: AttendanceBreakRow[];
+  awayMinutes: number | null;
+}) {
+  const hasBreakRows = breakRows.length > 0;
+
+  if (!hasBreakRows) {
+    return <span>{formatDuration(awayMinutes)}</span>;
+  }
+
+  const tooltipText = breakRows
+    .map(
+      (row, index) =>
+        `#${index + 1} 途中退出 ${formatTime(row.break_out_time)} / 再入 ${
+          row.break_in_time ? formatTime(row.break_in_time) : "未再入"
+        }`
+    )
+    .join("\n");
+
+  return (
+    <span className={styles.awayTooltipWrap} tabIndex={0} aria-label={tooltipText}>
+      <span>{formatDuration(awayMinutes)}</span>
+      <span className={styles.awayTooltip}>
+        <span className={styles.awayTooltipTitle}>離席履歴</span>
+        {breakRows.map((row, index) => (
+          <span key={row.id} className={styles.awayTooltipRow}>
+            <span>#{index + 1}</span>
+            <span>途中退出 {formatTime(row.break_out_time)}</span>
+            <span>再入 {row.break_in_time ? formatTime(row.break_in_time) : "未再入"}</span>
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 function formatDateForPopup(dateKey: string) {
   const date = new Date(`${dateKey}T00:00:00`);
   const week = ["日", "月", "火", "水", "木", "金", "土"][date.getDay()];
@@ -194,6 +286,7 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
   const [message, setMessage] = useState("");
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([]);
+  const [attendanceBreakRows, setAttendanceBreakRows] = useState<AttendanceBreakRow[]>([]);
   const [leaveRows, setLeaveRows] = useState<LeaveRequestRow[]>([]);
   const [holidaySet, setHolidaySet] = useState<Set<string>>(new Set());
   const [targetProfile, setTargetProfile] = useState<ProfileRow | null>(null);
@@ -226,6 +319,7 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
 
       const [
         { data: attendanceData, error: attendanceError },
+        { data: attendanceBreakData, error: attendanceBreakError },
         { data: leaveData, error: leaveError },
         { data: profileData, error: profileError },
         { data: currentProfileData, error: currentProfileError },
@@ -237,6 +331,13 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
           .gte("work_date", from)
           .lte("work_date", to)
           .order("work_date", { ascending: true }),
+        supabase
+          .from("attendance_break")
+          .select("id,profile_id,work_date,break_out_time,break_in_time")
+          .eq("profile_id", profileId)
+          .gte("work_date", from)
+          .lte("work_date", to)
+          .order("break_out_time", { ascending: true }),
         supabase
           .from("leave_request")
           .select("id,profile_id,work_date,leave_type,approval_status")
@@ -258,11 +359,13 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
       ]);
 
       if (attendanceError) throw new Error(attendanceError.message);
+      if (attendanceBreakError) throw new Error(attendanceBreakError.message);
       if (leaveError) throw new Error(leaveError.message);
       if (profileError) throw new Error(profileError.message);
       if (currentProfileError) throw new Error(currentProfileError.message);
 
       setAttendanceRows((attendanceData ?? []) as AttendanceRow[]);
+      setAttendanceBreakRows((attendanceBreakData ?? []) as AttendanceBreakRow[]);
       setLeaveRows((leaveData ?? []) as LeaveRequestRow[]);
       setTargetProfile((profileData ?? null) as ProfileRow | null);
       setIsAdmin((currentProfileData as ProfileRow | null)?.is_admin === 1);
@@ -289,6 +392,8 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
   const dayRows = useMemo<DayRow[]>(() => {
     const attendanceMap = new Map(attendanceRows.map((row) => [row.work_date, row]));
     const leaveMap = new Map(leaveRows.map((row) => [row.work_date, row]));
+    const awayMinutesMap = getAwayMinutesByDate(attendanceBreakRows);
+    const breakRowsMap = getBreakRowsByDate(attendanceBreakRows);
 
     const rows: DayRow[] = [];
     const monthStart = getMonthStart(displayMonth);
@@ -308,6 +413,10 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
         attendance,
       });
 
+      const awayMinutes = awayMinutesMap.get(dateKey) ?? 0;
+      const breakRows = breakRowsMap.get(dateKey) ?? [];
+      const workMinutes = getWorkedMinutes(attendance?.start_time ?? null, attendance?.end_time ?? null, awayMinutes);
+
       rows.push({
         dateKey,
         dayLabel: `${current.getMonth() + 1}/${current.getDate()}`,
@@ -316,15 +425,17 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
         breakOutTime: attendance?.break_out_time ?? null,
         breakInTime: attendance?.break_in_time ?? null,
         endTime: attendance?.end_time ?? null,
-        workMinutes: getWorkedMinutes(attendance?.start_time ?? null, attendance?.end_time ?? null),
-        overtimeMinutes: getOvertimeMinutes(attendance?.start_time ?? null, attendance?.end_time ?? null),
+        awayMinutes,
+        breakRows,
+        workMinutes,
+        overtimeMinutes: getOvertimeMinutes(workMinutes),
         statusLabel: status.label,
         statusType: status.type,
       });
     }
 
     return rows;
-  }, [attendanceRows, displayMonth, holidaySet, leaveRows]);
+  }, [attendanceBreakRows, attendanceRows, displayMonth, holidaySet, leaveRows]);
 
   const summary = useMemo(() => {
     const workedMinutes = dayRows.reduce((sum, row) => sum + (row.workMinutes ?? 0), 0);
@@ -454,8 +565,7 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
               <tr>
                 <th>日付</th>
                 <th>出勤</th>
-                <th>退出</th>
-                <th>再入</th>
+                <th>離席時間</th>
                 <th>退勤</th>
                 <th>勤務時間</th>
                 <th>残業</th>
@@ -466,11 +576,11 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className={styles.emptyCell}>読み込み中...</td>
+                  <td colSpan={isAdmin ? 8 : 7} className={styles.emptyCell}>読み込み中...</td>
                 </tr>
               ) : dayRows.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className={styles.emptyCell}>データがありません。</td>
+                  <td colSpan={isAdmin ? 8 : 7} className={styles.emptyCell}>データがありません。</td>
                 </tr>
               ) : (
                 dayRows.map((row) => {
@@ -483,8 +593,7 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
                         {row.dayLabel}
                       </td>
                       <td>{formatTime(row.startTime)}</td>
-                      <td>{formatTime(row.breakOutTime)}</td>
-                      <td>{formatTime(row.breakInTime)}</td>
+                      <td><AwayDurationCell breakRows={row.breakRows} awayMinutes={row.awayMinutes} /></td>
                       <td>{formatTime(row.endTime)}</td>
                       <td>{formatDuration(row.workMinutes)}</td>
                       <td>{formatDuration(row.overtimeMinutes)}</td>
@@ -555,7 +664,7 @@ export default function AttendanceDetailClient({ profileId }: { profileId: strin
                   />
                 </div>
                 <div className={styles.modalField}>
-                  <label className={styles.modalLabel}>退出</label>
+                  <label className={styles.modalLabel}>途中退出</label>
                   <input
                     type="time"
                     value={editForm.break_out_time}

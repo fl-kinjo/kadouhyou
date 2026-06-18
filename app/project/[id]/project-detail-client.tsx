@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { createClient } from "@/app/utils/supabase/client";
 import ProjectDetailActions from "./project-detail-actions";
 import CostTabsSection from "./cost-tabs-section";
+import CommentSection from "./comment-section";
 import styles from "./page.module.css";
 
 type SalesRecognitionRow = {
@@ -20,6 +21,11 @@ type SavedRecognitionCell = {
   amount: number;
 };
 
+type ProjectAlert = {
+  id: string;
+  message: string;
+};
+
 type InitialData = {
   projectId: string;
   header: {
@@ -31,6 +37,7 @@ type InitialData = {
     updatedAt: string;
     statusLabel: string;
   };
+  alerts: ProjectAlert[];
   summary: {
     invoiceAmount: number;
     invoiceMonthLabel: string;
@@ -371,6 +378,17 @@ export default function ProjectDetailClient({ initialData }: { initialData: Init
             最終更新者：{initialData.header.updatedByName}（{initialData.header.updatedAt}）
           </div>
 
+          {initialData.alerts.length > 0 && (
+            <div className={styles.projectAlertList}>
+              {initialData.alerts.map((alert) => (
+                <div key={alert.id} className={styles.projectAlertItem}>
+                  <span className={styles.projectAlertIcon}>!</span>
+                  <span>{alert.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className={styles.statusRow}>
             <span className={styles.statusBadge}>{initialData.header.statusLabel}</span>
           </div>
@@ -545,6 +563,8 @@ export default function ProjectDetailClient({ initialData }: { initialData: Init
         partners={initialData.cost.partners}
         jobs={initialData.cost.jobs}
       />
+
+      <CommentSection projectId={initialData.projectId} />
 
       {isModalOpen && (
         <div className={styles.modalOverlay} onClick={closeEditModal}>

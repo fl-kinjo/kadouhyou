@@ -154,8 +154,8 @@
 }
 
 .statusWork {
-  background: #cfe9bf;
-  color: #2d6a1f;
+  background: #3b82f6;
+  color: #fff;
 }
 
 .statusHoliday {
@@ -196,6 +196,64 @@
 .statusMissing {
   background: #ffd7e5;
   color: #a3325d;
+}
+
+
+.awayTooltipWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  outline: none;
+}
+
+.awayTooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  min-width: 240px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.96);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 20;
+  white-space: normal;
+}
+
+.awayTooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: rgba(17, 24, 39, 0.96) transparent transparent transparent;
+}
+
+.awayTooltipWrap:hover .awayTooltip,
+.awayTooltipWrap:focus .awayTooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.awayTooltipTitle {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 900;
+}
+
+.awayTooltipRow {
+  display: grid;
+  grid-template-columns: 32px 1fr 1fr;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {

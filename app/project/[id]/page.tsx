@@ -110,6 +110,11 @@ type SavedRecognitionCell = {
   amount: number;
 };
 
+type ProjectAlert = {
+  id: string;
+  message: string;
+};
+
 const STATUS_LABELS: Record<number, string> = {
   0: "保留",
   1: "営業中（高）",
@@ -163,6 +168,82 @@ function formatDate(value: string | null | undefined): string {
 function formatMonth(value: string | null | undefined): string {
   if (!value) return "-";
   return value.slice(0, 7).replace("-", "/");
+}
+
+function isBlank(value: string | null | undefined): boolean {
+  return !value || value.trim() === "";
+}
+
+function getMonthStart(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function buildProjectAlerts(
+  project: ProjectRow,
+  plannedCosts: PlannedCostRow[]
+): ProjectAlert[] {
+  const alerts: ProjectAlert[] = [];
+  const invoiceRequired = [5, 6, 7].includes(project.status ?? -1);
+
+  if (invoiceRequired) {
+    const currentMonthFirstDay = getMonthStart(new Date());
+    const invoiceMonthDate = project.invoice_month
+      ? new Date(`${project.invoice_month.slice(0, 7)}-01T00:00:00`)
+      : null;
+
+    if (
+      invoiceMonthDate &&
+      !Number.isNaN(invoiceMonthDate.getTime()) &&
+      invoiceMonthDate < currentMonthFirstDay &&
+      isBlank(project.invoice)
+    ) {
+      alerts.push({
+        id: "overdue-invoice",
+        message: "請求月超過・請求書未アップです。",
+      });
+    }
+
+    const hasPlannedCost = plannedCosts.some(
+      (row) => toSafeNumber(row.operating_person_months) > 0 || row.amount != null
+    );
+
+    if (!hasPlannedCost) {
+      alerts.push({
+        id: "no-planned-cost",
+        message: "予定工数未入力です。",
+      });
+    }
+
+    if (project.invoice_amount == null) {
+      alerts.push({
+        id: "no-invoice-amount",
+        message: "請求金額未入力です。",
+      });
+    }
+  }
+
+  if (project.planned_cost_approval_status === 1) {
+    alerts.push({
+      id: "planned-cost-approval-pending",
+      message: "予定工数確認依頼中です。",
+    });
+  }
+
+  if (project.planned_cost_approval_status === 3) {
+    alerts.push({
+      id: "planned-cost-approval-rejected",
+      message: "予定工数が却下されています。",
+    });
+  }
+
+  if (project.planned_cost_approval_status === 4) {
+    alerts.push({
+      id: "planned-cost-approval-canceled",
+      message: "予定工数確認依頼が取消されています。",
+    });
+  }
+
+  return alerts;
 }
 
 function formatPeriod(
@@ -300,6 +381,7 @@ export default async function ProjectDetailPage(props: PageProps) {
   const actualCostRows = (actualCosts ?? []) as ActualCostRow[];
   const reportRows = (reports ?? []) as ReportRow[];
   const savedRecognitionRows = (savedRecognitions ?? []) as SavedRecognitionRow[];
+  const projectAlerts = buildProjectAlerts(projectRow, plannedCostRows);
 
   const profileMap = new Map<string, ProfileRow>(allProfiles.map((profile) => [profile.id, profile]));
   const jobMap = new Map<string, string>(jobRows.map((job) => [job.id, job.name]));
@@ -447,6 +529,7 @@ export default async function ProjectDetailPage(props: PageProps) {
           updatedAt: formatDateTime(projectRow.updated_at),
           statusLabel: STATUS_LABELS[projectRow.status ?? 0] ?? "-",
         },
+        alerts: projectAlerts,
         summary: {
           invoiceAmount,
           invoiceMonthLabel: formatMonth(projectRow.invoice_month),

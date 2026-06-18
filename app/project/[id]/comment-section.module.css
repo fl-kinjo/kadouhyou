@@ -1,0 +1,148 @@
+.commentSection {
+  margin-top: 46px;
+  border: 1px solid #d7d7d7;
+  border-radius: 16px;
+  background: #fff;
+  padding: 24px;
+}
+
+.commentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.commentTitle {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.commentLead {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.commentInputCard {
+  border: 1px solid #e1e1e1;
+  border-radius: 14px;
+  background: #f7f7f7;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.commentTextarea {
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid #bbb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.7;
+  resize: vertical;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.commentTextarea:disabled {
+  background: #f0f0f0;
+}
+
+.commentButtonRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.commentSubmitButton {
+  min-width: 220px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid #d70000;
+  background: #d70000;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.commentSubmitButton:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.commentList {
+  display: grid;
+  gap: 12px;
+}
+
+.commentItem {
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.commentMeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.commentAuthor {
+  font-size: 14px;
+  font-weight: 900;
+  color: #111;
+}
+
+.commentDate {
+  font-size: 13px;
+  color: #777;
+  font-weight: 700;
+}
+
+.commentBody {
+  margin: 0;
+  color: #111;
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.emptyComment {
+  border: 1px dashed #cfcfcf;
+  border-radius: 12px;
+  padding: 18px;
+  color: #666;
+  font-weight: 700;
+  text-align: center;
+  background: #fafafa;
+}
+
+@media (max-width: 760px) {
+  .commentSection {
+    padding: 18px 14px;
+  }
+
+  .commentHeader {
+    align-items: flex-start;
+  }
+
+  .commentSubmitButton {
+    width: 100%;
+  }
+}

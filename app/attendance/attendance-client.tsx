@@ -55,6 +55,7 @@ type DayRow = {
   startTime: string | null;
   endTime: string | null;
   awayMinutes: number | null;
+  breakRows: AttendanceBreakRow[];
   workMinutes: number | null;
   overtimeMinutes: number | null;
   statusLabel: string;
@@ -402,6 +403,18 @@ function getAwayMinutesByDate(rows: AttendanceBreakRow[]) {
   return map;
 }
 
+function getBreakRowsByDate(rows: AttendanceBreakRow[]) {
+  const map = new Map<string, AttendanceBreakRow[]>();
+
+  for (const row of rows) {
+    const current = map.get(row.work_date) ?? [];
+    current.push(row);
+    map.set(row.work_date, current);
+  }
+
+  return map;
+}
+
 function getLatestCorrectionRequestMap(rows: AttendanceCorrectionRequestRow[]) {
   const map = new Map<string, AttendanceCorrectionRequestRow>();
 
@@ -434,6 +447,46 @@ function createRequestGroupId() {
   }
 
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+
+function AwayDurationCell({
+  breakRows,
+  awayMinutes,
+}: {
+  breakRows: AttendanceBreakRow[];
+  awayMinutes: number | null;
+}) {
+  const hasBreakRows = breakRows.length > 0;
+
+  if (!hasBreakRows) {
+    return <span>{formatDuration(awayMinutes)}</span>;
+  }
+
+  const tooltipText = breakRows
+    .map(
+      (row, index) =>
+        `#${index + 1} 途中退出 ${formatTime(row.break_out_time)} / 再入 ${
+          row.break_in_time ? formatTime(row.break_in_time) : "未再入"
+        }`
+    )
+    .join("\n");
+
+  return (
+    <span className={styles.awayTooltipWrap} tabIndex={0} title={tooltipText}>
+      <span className={styles.awayDurationValue}>{formatDuration(awayMinutes)}</span>
+      <span className={styles.awayTooltip}>
+        <span className={styles.awayTooltipTitle}>離席履歴</span>
+        {breakRows.map((row, index) => (
+          <span key={row.id} className={styles.awayTooltipRow}>
+            <span>#{index + 1}</span>
+            <span>途中退出 {formatTime(row.break_out_time)}</span>
+            <span>再入 {row.break_in_time ? formatTime(row.break_in_time) : "未再入"}</span>
+          </span>
+        ))}
+      </span>
+    </span>
+  );
 }
 
 export default function AttendanceClient() {
@@ -551,6 +604,7 @@ export default function AttendanceClient() {
 
   const todayKey = useMemo(() => getDateKey(new Date()), []);
   const awayMinutesMap = useMemo(() => getAwayMinutesByDate(attendanceBreakRows), [attendanceBreakRows]);
+  const breakRowsMap = useMemo(() => getBreakRowsByDate(attendanceBreakRows), [attendanceBreakRows]);
   const latestCorrectionMap = useMemo(() => getLatestCorrectionRequestMap(correctionRows), [correctionRows]);
   const latestLeaveMap = useMemo(() => getLatestLeaveRequestMap(leaveRows), [leaveRows]);
 
@@ -584,6 +638,7 @@ export default function AttendanceClient() {
       const startTime = approvedCorrection?.requested_start_time ?? attendance?.start_time ?? null;
       const endTime = approvedCorrection?.requested_end_time ?? attendance?.end_time ?? null;
       const awayMinutes = approvedCorrection?.requested_away_minutes ?? awayMinutesMap.get(dateKey) ?? 0;
+      const breakRows = breakRowsMap.get(dateKey) ?? [];
 
       const status = getStatusInfo({
         isFuture,
@@ -603,6 +658,7 @@ export default function AttendanceClient() {
         startTime,
         endTime,
         awayMinutes,
+        breakRows,
         workMinutes,
         overtimeMinutes,
         statusLabel: status.label,
@@ -613,7 +669,7 @@ export default function AttendanceClient() {
     }
 
     return result;
-  }, [attendanceRows, awayMinutesMap, displayMonth, holidaySet, latestCorrectionMap, latestLeaveMap, todayKey]);
+  }, [attendanceRows, awayMinutesMap, breakRowsMap, displayMonth, holidaySet, latestCorrectionMap, latestLeaveMap, todayKey]);
 
   const summary = useMemo(() => {
     const workedMinutes = dayRows.reduce((sum, row) => sum + (row.workMinutes ?? 0), 0);
@@ -858,7 +914,9 @@ export default function AttendanceClient() {
                       </td>
                       <td>{formatTime(row.startTime)}</td>
                       <td>{formatTime(row.endTime)}</td>
-                      <td>{formatDuration(row.awayMinutes)}</td>
+                      <td>
+                        <AwayDurationCell breakRows={row.breakRows} awayMinutes={row.awayMinutes} />
+                      </td>
                       <td>{formatDuration(row.workMinutes)}</td>
                       <td>{formatDuration(row.overtimeMinutes)}</td>
                       <td>

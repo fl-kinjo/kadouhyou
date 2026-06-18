@@ -53,6 +53,73 @@ type EmployeeRow = {
   created_at: string;
 };
 
+
+type ProfileMenuPermission = {
+  menu_group_key: string;
+  menu_item_href: string | null;
+  can_view: boolean | null;
+};
+
+const MENU_GROUPS = [
+  {
+    key: "attendance",
+    title: "勤怠",
+    items: [
+      { href: "/attendance", label: "勤怠入力" },
+      { href: "/report", label: "業務報告" },
+      { href: "/leave-request", label: "休暇申請" },
+      { href: "/attendance-management", label: "勤怠管理", adminOnly: true },
+    ],
+  },
+  {
+    key: "request",
+    title: "経費",
+    items: [
+      { href: "/expenses", label: "経費申請" },
+      { href: "/expenses-management", label: "経費管理", adminOnly: true },
+    ],
+  },
+  {
+    key: "project",
+    title: "案件",
+    items: [
+      { href: "/project", label: "案件管理" },
+      { href: "/summary", label: "案件サマリー" },
+      { href: "/summary/sales2", label: "営業サマリー" },
+      { href: "/summary/client", label: "クライアント別年間実績" },
+      { href: "/client", label: "クライアント管理", adminOnly: true },
+      { href: "/partner", label: "パートナー管理", adminOnly: true },
+      { href: "/project-request", label: "予定工数申請管理", adminOnly: true },
+    ],
+  },
+  {
+    key: "general",
+    title: "総務管理",
+    items: [
+      { href: "/employee", label: "社員管理", adminOnly: true },
+      { href: "/team", label: "組織管理", adminOnly: true },
+      { href: "/job", label: "職種管理", adminOnly: true },
+    ],
+  },
+] as const;
+
+function menuPermissionKey(groupKey: string, itemHref = "") {
+  return `${groupKey}::${itemHref}`;
+}
+
+function getDefaultMenuPermissionMap() {
+  const map: Record<string, boolean> = {};
+
+  for (const group of MENU_GROUPS) {
+    map[menuPermissionKey(group.key)] = true;
+    for (const item of group.items) {
+      map[menuPermissionKey(group.key, item.href)] = true;
+    }
+  }
+
+  return map;
+}
+
 function fullName(lastName?: string | null, firstName?: string | null) {
   return `${lastName ?? ""}${firstName ?? ""}`.trim();
 }
@@ -129,6 +196,14 @@ export default function EmployeeClient() {
   const [formJobIds, setFormJobIds] = useState<string[]>([""]);
   const [formOperatingPersonMonths, setFormOperatingPersonMonths] = useState("1");
   const [visibleStatuses, setVisibleStatuses] = useState<number[]>([0]);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuTargetProfileId, setMenuTargetProfileId] = useState<string | null>(null);
+  const [menuTargetName, setMenuTargetName] = useState("");
+  const [menuPermissionMap, setMenuPermissionMap] = useState<Record<string, boolean>>(
+    getDefaultMenuPermissionMap()
+  );
+  const [menuSaving, setMenuSaving] = useState(false);
 
   const buildTeamPathMap = (teamList: Team[]) => {
     const teamMap = new Map(teamList.map((team) => [team.id, team]));
@@ -430,6 +505,126 @@ export default function EmployeeClient() {
     setOpen(true);
   };
 
+
+  const openMenuPermission = async (profileId: string) => {
+    if (!isAdmin) return;
+
+    setErrorMsg("");
+    setMenuTargetProfileId(profileId);
+
+    const profile = profiles.find((item) => item.id === profileId);
+    if (!profile) {
+      setErrorMsg("画面管理対象のユーザーが見つかりません。再読み込みしてください。");
+      return;
+    }
+
+    setMenuTargetName(fullName(profile.last_name, profile.first_name) || profile.email || "-");
+
+    const nextPermissionMap = getDefaultMenuPermissionMap();
+
+    const { data, error } = await supabase
+      .from("profile_menu_permission")
+      .select("menu_group_key,menu_item_href,can_view")
+      .eq("profile_id", profileId);
+
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+
+    for (const row of (data ?? []) as ProfileMenuPermission[]) {
+      nextPermissionMap[menuPermissionKey(row.menu_group_key, row.menu_item_href ?? "")] = row.can_view !== false;
+    }
+
+    setMenuPermissionMap(nextPermissionMap);
+    setMenuOpen(true);
+  };
+
+  const closeMenuModal = () => {
+    if (menuSaving) return;
+    setMenuOpen(false);
+    setMenuTargetProfileId(null);
+    setMenuTargetName("");
+    setMenuPermissionMap(getDefaultMenuPermissionMap());
+  };
+
+  const setMenuGroupPermission = (groupKey: string, checked: boolean) => {
+    const group = MENU_GROUPS.find((item) => item.key === groupKey);
+    if (!group) return;
+
+    setMenuPermissionMap((current) => {
+      const next = { ...current, [menuPermissionKey(group.key)]: checked };
+      for (const item of group.items) {
+        next[menuPermissionKey(group.key, item.href)] = checked;
+      }
+      return next;
+    });
+  };
+
+  const setMenuItemPermission = (groupKey: string, itemHref: string, checked: boolean) => {
+    const group = MENU_GROUPS.find((item) => item.key === groupKey);
+    if (!group) return;
+
+    setMenuPermissionMap((current) => {
+      const next = { ...current, [menuPermissionKey(groupKey, itemHref)]: checked };
+      const hasVisibleItem = group.items.some((item) => {
+        if (item.href === itemHref) return checked;
+        return next[menuPermissionKey(groupKey, item.href)] !== false;
+      });
+      next[menuPermissionKey(groupKey)] = hasVisibleItem;
+      return next;
+    });
+  };
+
+  const saveMenuPermissions = async () => {
+    if (!isAdmin) {
+      setErrorMsg("編集権限がありません。");
+      return;
+    }
+    if (!menuTargetProfileId) {
+      setErrorMsg("画面管理対象のユーザーを取得できません。");
+      return;
+    }
+
+    setMenuSaving(true);
+    setErrorMsg("");
+
+    try {
+      const updaterId = await getCurrentUpdaterId();
+      const payload = MENU_GROUPS.flatMap((group) => [
+        {
+          profile_id: menuTargetProfileId,
+          menu_group_key: group.key,
+          menu_item_href: "",
+          can_view: menuPermissionMap[menuPermissionKey(group.key)] !== false,
+          updated_by: updaterId,
+        },
+        ...group.items.map((item) => ({
+          profile_id: menuTargetProfileId,
+          menu_group_key: group.key,
+          menu_item_href: item.href,
+          can_view: menuPermissionMap[menuPermissionKey(group.key, item.href)] !== false,
+          updated_by: updaterId,
+        })),
+      ]);
+
+      const { error } = await supabase
+        .from("profile_menu_permission")
+        .upsert(payload, { onConflict: "profile_id,menu_group_key,menu_item_href" });
+
+      if (error) throw new Error(error.message);
+
+      setMenuOpen(false);
+      setMenuTargetProfileId(null);
+      setMenuTargetName("");
+      setMenuPermissionMap(getDefaultMenuPermissionMap());
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMenuSaving(false);
+    }
+  };
+
   const addTeamRow = () => setFormTeamIds((current) => [...current, ""]);
   const removeTeamRow = (index: number) => {
     setFormTeamIds((current) => (current.length <= 1 ? current : current.filter((_, idx) => idx !== index)));
@@ -714,9 +909,17 @@ export default function EmployeeClient() {
                             type="button"
                             onClick={() => openEdit(row.profile_id)}
                             className={styles.btnSmall}
-                            disabled={saving}
+                            disabled={saving || menuSaving}
                           >
                             編集
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openMenuPermission(row.profile_id)}
+                            className={styles.btnSmall}
+                            disabled={saving || menuSaving}
+                          >
+                            画面管理
                           </button>
                         </div>
                       </td>
@@ -901,6 +1104,75 @@ export default function EmployeeClient() {
               <div className={styles.modalButtonRow}>
                 <button type="button" onClick={save} className={styles.btnRedBig} disabled={saving}>
                   {saving ? "保存中..." : mode === "edit" ? "更新する" : "登録する"}
+                </button>
+              </div>
+
+              {errorMsg && <p className={styles.modalErrorText}>{errorMsg}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {menuOpen && isAdmin && (
+        <div className={styles.modalOverlay} onClick={closeMenuModal}>
+          <div className={styles.menuModalCard} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>画面管理：{menuTargetName}</h2>
+              <button type="button" onClick={closeMenuModal} className={styles.btnX} aria-label="close">
+                ✕
+              </button>
+            </div>
+
+            <div className={styles.menuPermissionBody}>
+              <p className={styles.formHelpText}>
+                チェックを外した画面は、対象社員のメニューから非表示になります。大分類のチェックを外すと配下の画面もまとめて非表示になります。
+              </p>
+
+              <div className={styles.menuPermissionList}>
+                {MENU_GROUPS.map((group) => {
+                  const groupChecked = menuPermissionMap[menuPermissionKey(group.key)] !== false;
+
+                  return (
+                    <section key={group.key} className={styles.menuPermissionGroup}>
+                      <label className={styles.menuPermissionGroupLabel}>
+                        <input
+                          type="checkbox"
+                          checked={groupChecked}
+                          onChange={(event) => setMenuGroupPermission(group.key, event.target.checked)}
+                          disabled={menuSaving}
+                        />
+                        <span>{group.title}</span>
+                      </label>
+
+                      <div className={styles.menuPermissionItems}>
+                        {group.items.map((item) => {
+                          const itemChecked = menuPermissionMap[menuPermissionKey(group.key, item.href)] !== false;
+
+                          return (
+                            <label key={item.href} className={styles.menuPermissionItemLabel}>
+                              <input
+                                type="checkbox"
+                                checked={groupChecked && itemChecked}
+                                onChange={(event) => setMenuItemPermission(group.key, item.href, event.target.checked)}
+                                disabled={menuSaving || !groupChecked}
+                              />
+                              <span>{item.label}</span>
+                              {"adminOnly" in item && item.adminOnly && (
+                                <span className={styles.menuPermissionNote}>管理者専用</span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+
+              <div className={styles.modalButtonRow}>
+                <button type="button" onClick={saveMenuPermissions} className={styles.btnRedBig} disabled={menuSaving}>
+                  {menuSaving ? "保存中..." : "保存する"}
                 </button>
               </div>
 

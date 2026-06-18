@@ -341,3 +341,75 @@
 .filterLabel {
   font-weight: 800;
 }
+
+.menuModalCard {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px 18px 22px;
+  border: 1px solid #ddd;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.menuPermissionBody {
+  margin-top: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.menuPermissionList {
+  display: grid;
+  gap: 14px;
+}
+
+.menuPermissionGroup {
+  border: 1px solid #e5e5e5;
+  background: #fafafa;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.menuPermissionGroupLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  color: #111;
+}
+
+.menuPermissionItems {
+  margin-top: 12px;
+  padding-left: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.menuPermissionItemLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.menuPermissionNote {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f3e8ff;
+  color: #6b21a8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .menuPermissionItems {
+    grid-template-columns: 1fr;
+    padding-left: 8px;
+  }
+}

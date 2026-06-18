@@ -1,0 +1,366 @@
+.page {
+  padding: 44px 52px;
+  max-width: 1500px;
+}
+
+.headerRow {
+  border-bottom: 1px solid #d5d5d5;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.yearRow {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin: 0 0 34px;
+}
+
+.yearButton {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: #111;
+}
+
+.yearText {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.section {
+  margin-top: 0;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.targetActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-width: 220px;
+  height: 40px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: none;
+  background: #cf0a0a;
+  color: #fff;
+}
+
+.secondaryButton {
+  border: 1px solid #bbb;
+  background: #fff;
+  color: #333;
+  min-width: 120px;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.mainTabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  border-bottom: 5px solid #ffd7e4;
+  margin: 0 0 14px;
+}
+
+.mainTab {
+  min-width: 170px;
+  height: 46px;
+  border: 1px solid #cfcfcf;
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  background: #d9d9d9;
+  color: #555;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.mainTabActive {
+  min-width: 250px;
+  background: #ffd7e4;
+  border-color: #ffd7e4;
+  color: #111;
+}
+
+.subTabs {
+  display: flex;
+  gap: 14px;
+  margin: 10px 0 12px;
+}
+
+.subTab {
+  min-width: 76px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #bbb;
+  background: #fff;
+  color: #111;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.subTabActive {
+  border-color: #ff8da8;
+  background: #fff1f5;
+  color: #e00031;
+}
+
+.tableFrame {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 1260px;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #d8d8d8;
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 14px;
+  white-space: nowrap;
+  border-right: 1px solid #d0d0d0;
+}
+
+.table td {
+  padding: 16px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  border-right: 1px solid #f0f0f0;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.clientHeader,
+.clientCell {
+  width: 170px;
+  min-width: 170px;
+  text-align: left !important;
+}
+
+.clientCell {
+  font-weight: 800;
+  background: #fff;
+}
+
+.numberCell,
+.totalCell {
+  text-align: right;
+}
+
+.totalCell {
+  font-weight: 900;
+  border-left: 1px solid #d8d8d8;
+}
+
+.valueButton {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #111;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.valueButton:hover {
+  color: #d6002f;
+}
+
+.targetInput {
+  width: 110px;
+  height: 34px;
+  border: 1px solid #cfcfcf;
+  border-radius: 6px;
+  padding: 0 8px;
+  text-align: right;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.emptyCell {
+  padding: 24px 12px !important;
+  text-align: center;
+  color: #666;
+}
+
+.note {
+  margin: 12px 0 0;
+  color: #777;
+  font-size: 13px;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modalCard {
+  width: min(1180px, 100%);
+  max-height: min(760px, 90vh);
+  overflow: hidden;
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.modalLead {
+  margin: 6px 0 0;
+  color: #555;
+  font-size: 13px;
+}
+
+.modalCloseButton {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: #eee;
+  color: #333;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detailTableFrame {
+  overflow: auto;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.detailTable {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+}
+
+.detailTable th {
+  background: #efefef;
+  border-bottom: 1px solid #ddd;
+  padding: 12px 10px;
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.detailTable td {
+  border-bottom: 1px solid #eee;
+  padding: 12px 10px;
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.projectLink {
+  color: #2563eb;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.projectLink:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 24px 16px;
+  }
+
+  .sectionHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+  }
+
+  .targetActions {
+    width: 100%;
+  }
+
+  .mainTab,
+  .mainTabActive {
+    min-width: 150px;
+  }
+}
