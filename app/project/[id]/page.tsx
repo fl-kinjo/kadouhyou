@@ -14,6 +14,7 @@ type ProjectRow = {
   start_date: string | null;
   end_date: string | null;
   project_manager_id: string | null;
+  sales_profile_id: string | null;
   pm_revenue_share: number | null;
   member_revenue_share: number | null;
   status: number | null;
@@ -306,7 +307,7 @@ export default async function ProjectDetailPage(props: PageProps) {
   const { data: project, error: projectError } = await supabase
     .from("project")
     .select(
-      "id,project_no,name,client_id,start_date,end_date,project_manager_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice,planned_cost_approval_status,created_at,updated_at,updated_by"
+      "id,project_no,name,client_id,start_date,end_date,project_manager_id,sales_profile_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice,planned_cost_approval_status,created_at,updated_at,updated_by"
     )
     .eq("id", id)
     .single();
@@ -395,6 +396,10 @@ export default async function ProjectDetailPage(props: PageProps) {
 
   const projectManagerProfile: ProfileRow | null = projectRow.project_manager_id
     ? profileMap.get(projectRow.project_manager_id) ?? null
+    : null;
+
+  const salesProfile: ProfileRow | null = projectRow.sales_profile_id
+    ? profileMap.get(projectRow.sales_profile_id) ?? null
     : null;
 
   const projectMemberIds: string[] = memberRows
@@ -543,6 +548,7 @@ export default async function ProjectDetailPage(props: PageProps) {
         basicInfo: {
           periodLabel: formatPeriod(projectRow.start_date, projectRow.end_date),
           clientName: clientRow?.name ?? "-",
+          salesLabel: fullName(salesProfile),
           pmLabel: projectManagerProfile
             ? `${fullName(projectManagerProfile)}（${toSafeNumber(projectRow.pm_revenue_share)}%）`
             : "-",

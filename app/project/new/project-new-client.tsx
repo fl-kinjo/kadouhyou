@@ -19,6 +19,16 @@ type Profile = {
   status: number | null;
 };
 
+type ProfileJob = {
+  profile_id: string;
+  job_id: string;
+};
+
+type Job = {
+  id: string;
+  name: string;
+};
+
 type GoogleDriveFile = {
   id: string;
   name: string;
@@ -156,6 +166,7 @@ export default function ProjectNewClient() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [salesProfiles, setSalesProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -165,6 +176,7 @@ export default function ProjectNewClient() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [projectManagerId, setProjectManagerId] = useState("");
+  const [salesProfileId, setSalesProfileId] = useState("");
   const [memberProfileIds, setMemberProfileIds] = useState<string[]>([""]);
   const [pmRevenueShare, setPmRevenueShare] = useState("");
   const [memberRevenueShare, setMemberRevenueShare] = useState("");
@@ -204,6 +216,8 @@ export default function ProjectNewClient() {
         const [
           { data: clientData, error: clientError },
           { data: profileData, error: profileError },
+          { data: profileJobData, error: profileJobError },
+          { data: jobData, error: jobError },
         ] = await Promise.all([
           supabase
             .from("client")
@@ -215,18 +229,30 @@ export default function ProjectNewClient() {
             .select("id,email,last_name,first_name,status")
             .neq("status", 2)
             .order("created_at", { ascending: true }),
+          supabase.from("profile_job").select("profile_id,job_id"),
+          supabase.from("job").select("id,name"),
         ]);
 
         if (clientError) throw new Error(clientError.message);
         if (profileError) throw new Error(profileError.message);
+        if (profileJobError) throw new Error(profileJobError.message);
+        if (jobError) throw new Error(jobError.message);
 
         const nextClients = (clientData ?? []) as Client[];
         const nextProfiles = ((profileData ?? []) as Profile[]).filter(
           (profile) => `${profile.last_name ?? ""}${profile.first_name ?? ""}`.trim() !== ""
         );
+        const profileJobs = (profileJobData ?? []) as ProfileJob[];
+        const jobs = (jobData ?? []) as Job[];
+        const salesJobIds = new Set(jobs.filter((job) => job.name === "営業").map((job) => job.id));
+        const salesProfileIds = new Set(
+          profileJobs.filter((profileJob) => salesJobIds.has(profileJob.job_id)).map((profileJob) => profileJob.profile_id)
+        );
+        const nextSalesProfiles = nextProfiles.filter((profile) => salesProfileIds.has(profile.id));
 
         setClients(nextClients);
         setProfiles(nextProfiles);
+        setSalesProfiles(nextSalesProfiles);
 
         if (!clientId && nextClients.length > 0) {
           setClientId(nextClients[0].id);
@@ -621,6 +647,7 @@ export default function ProjectNewClient() {
           start_date: startDate || null,
           end_date: endDate || null,
           project_manager_id: projectManagerId || null,
+          sales_profile_id: salesProfileId || updaterId,
           pm_revenue_share: toNumberOrNull(pmRevenueShare),
           member_revenue_share: toNumberOrNull(memberRevenueShare),
           status: Number(status),
@@ -723,6 +750,22 @@ export default function ProjectNewClient() {
               >
                 <option value="">選択してください</option>
                 {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {optionLabel(profile)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.gridRow}>
+              <div className={styles.gridLabel}>担当営業</div>
+              <select
+                value={salesProfileId}
+                onChange={(e) => setSalesProfileId(e.target.value)}
+                className={styles.select}
+              >
+                <option value="">なし（自分を担当営業にする）</option>
+                {salesProfiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
                     {optionLabel(profile)}
                   </option>

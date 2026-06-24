@@ -51,6 +51,7 @@ type InitialData = {
   basicInfo: {
     periodLabel: string;
     clientName: string;
+    salesLabel: string;
     pmLabel: string;
     directorLabel: string;
     invoiceUrl: string | null;
@@ -436,6 +437,9 @@ export default function ProjectDetailClient({ initialData }: { initialData: Init
 
             <div className={styles.labelCell}>クライアント</div>
             <div className={styles.valueCell}>{initialData.basicInfo.clientName}</div>
+
+            <div className={styles.labelCell}>担当営業</div>
+            <div className={styles.valueCell}>{initialData.basicInfo.salesLabel}</div>
 
             <div className={styles.labelCell}>PM</div>
             <div className={styles.valueCell}>{initialData.basicInfo.pmLabel}</div>

@@ -16,11 +16,13 @@ export default async function ProjectEditPage({ params }: { params: Promise<{ id
     { data: members, error: membersError },
     { data: clients, error: clientsError },
     { data: profiles, error: profilesError },
+    { data: profileJobs, error: profileJobsError },
+    { data: jobs, error: jobsError },
   ] = await Promise.all([
     supabase
       .from("project")
       .select(
-        "id,name,client_id,start_date,end_date,project_manager_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice"
+        "id,name,client_id,start_date,end_date,project_manager_id,sales_profile_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice"
       )
       .eq("id", id)
       .single(),
@@ -35,6 +37,8 @@ export default async function ProjectEditPage({ params }: { params: Promise<{ id
       .select("id,email,last_name,first_name,status")
       .neq("status", 2)
       .order("created_at", { ascending: true }),
+    supabase.from("profile_job").select("profile_id,job_id"),
+    supabase.from("job").select("id,name"),
   ]);
 
   if (projectError || !project) {
@@ -43,6 +47,8 @@ export default async function ProjectEditPage({ params }: { params: Promise<{ id
   if (membersError) throw new Error(membersError.message);
   if (clientsError) throw new Error(clientsError.message);
   if (profilesError) throw new Error(profilesError.message);
+  if (profileJobsError) throw new Error(profileJobsError.message);
+  if (jobsError) throw new Error(jobsError.message);
 
   const nextProfiles = ((profiles ?? []) as Array<{
     id: string;
@@ -52,6 +58,14 @@ export default async function ProjectEditPage({ params }: { params: Promise<{ id
     status: number | null;
   }>).filter((profile) => `${profile.last_name ?? ""}${profile.first_name ?? ""}`.trim() !== "");
 
+  const profileJobRows = (profileJobs ?? []) as Array<{ profile_id: string; job_id: string }>;
+  const jobRows = (jobs ?? []) as Array<{ id: string; name: string }>;
+  const salesJobIds = new Set(jobRows.filter((job) => job.name === "営業").map((job) => job.id));
+  const salesProfileIds = new Set(
+    profileJobRows.filter((profileJob) => salesJobIds.has(profileJob.job_id)).map((profileJob) => profileJob.profile_id)
+  );
+  const salesProfiles = nextProfiles.filter((profile) => salesProfileIds.has(profile.id));
+
   return (
     <ProjectEditClient
       projectId={id}
@@ -59,6 +73,7 @@ export default async function ProjectEditPage({ params }: { params: Promise<{ id
       initialMemberProfileIds={(members ?? []).map((member) => member.profile_id)}
       clients={(clients ?? []) as Array<{ id: string; name: string; is_focus: number | null }>}
       profiles={nextProfiles}
+      salesProfiles={salesProfiles}
     />
   );
 }

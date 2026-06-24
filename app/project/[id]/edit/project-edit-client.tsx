@@ -26,6 +26,7 @@ type ProjectInitial = {
   start_date: string | null;
   end_date: string | null;
   project_manager_id: string | null;
+  sales_profile_id: string | null;
   pm_revenue_share: number | string | null;
   member_revenue_share: number | string | null;
   status: number | null;
@@ -178,12 +179,14 @@ export default function ProjectEditClient({
   initialMemberProfileIds,
   clients,
   profiles,
+  salesProfiles,
 }: {
   projectId: string;
   initialProject: ProjectInitial;
   initialMemberProfileIds: string[];
   clients: Client[];
   profiles: Profile[];
+  salesProfiles: Profile[];
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -196,6 +199,7 @@ export default function ProjectEditClient({
   const [startDate, setStartDate] = useState(initialProject.start_date ?? "");
   const [endDate, setEndDate] = useState(initialProject.end_date ?? "");
   const [projectManagerId, setProjectManagerId] = useState(initialProject.project_manager_id ?? "");
+  const [salesProfileId, setSalesProfileId] = useState(initialProject.sales_profile_id ?? "");
   const [memberProfileIds, setMemberProfileIds] = useState(
     initialMemberProfileIds.length > 0 ? initialMemberProfileIds : [""]
   );
@@ -612,6 +616,7 @@ export default function ProjectEditClient({
           start_date: startDate || null,
           end_date: endDate || null,
           project_manager_id: projectManagerId || null,
+          sales_profile_id: salesProfileId || updaterId,
           pm_revenue_share: toNumberOrNull(pmRevenueShare),
           member_revenue_share: toNumberOrNull(memberRevenueShare),
           status: Number(status),
@@ -697,6 +702,18 @@ export default function ProjectEditClient({
           <select value={projectManagerId} onChange={(e) => setProjectManagerId(e.target.value)} className={styles.select}>
             <option value="">選択してください</option>
             {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {optionLabel(profile)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className={styles.gridRow}>
+          <div className={styles.gridLabel}>担当営業</div>
+          <select value={salesProfileId} onChange={(e) => setSalesProfileId(e.target.value)} className={styles.select}>
+            <option value="">なし（自分を担当営業にする）</option>
+            {salesProfiles.map((profile) => (
               <option key={profile.id} value={profile.id}>
                 {optionLabel(profile)}
               </option>
