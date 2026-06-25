@@ -558,6 +558,7 @@ export default async function ProjectDetailPage(props: PageProps) {
                   .map((profile) => `${fullName(profile)}（${perMemberSharePercent}%）`)
                   .join("、")
               : "-",
+          estimateUrl: projectRow.estimate,
           invoiceUrl: projectRow.invoice,
           plannedCostApprovedLabel: projectRow.planned_cost_approval_status === 2 ? "◯" : "-",
         },

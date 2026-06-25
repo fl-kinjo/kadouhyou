@@ -81,6 +81,47 @@
   align-items: center;
 }
 
+.paginationBar {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.paginationInfo {
+  color: #555;
+  font-size: 14px;
+}
+
+.paginationControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paginationButton {
+  padding: 8px 12px;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.paginationButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.paginationPage {
+  min-width: 72px;
+  text-align: center;
+  color: #333;
+  font-weight: 700;
+}
+
 .tableFrame {
   margin-top: 16px;
   border: 1px solid #ddd;
@@ -173,4 +214,14 @@
   .searchInput {
     width: 100%;
   }
+
+  .paginationBar {
+    align-items: stretch;
+  }
+
+  .paginationControls {
+    justify-content: space-between;
+    width: 100%;
+  }
 }
+

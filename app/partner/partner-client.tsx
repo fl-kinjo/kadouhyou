@@ -16,6 +16,8 @@ type ProfileRow = {
   id: string;
 };
 
+const PAGE_SIZE = 20;
+
 export default function PartnerClient() {
   const supabase = createClient();
 
@@ -24,6 +26,7 @@ export default function PartnerClient() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [q, setQ] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"create" | "edit">("create");
@@ -59,6 +62,23 @@ export default function PartnerClient() {
     if (!keyword) return rows;
     return rows.filter((row) => row.name.toLowerCase().includes(keyword));
   }, [q, rows]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [currentPage, filteredRows]);
+
+  const displayStart = filteredRows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const displayEnd = Math.min(currentPage * PAGE_SIZE, filteredRows.length);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [q]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const getCurrentProfileId = async () => {
     const {
@@ -197,7 +217,7 @@ export default function PartnerClient() {
                 </td>
               </tr>
             ) : (
-              filteredRows.map((row) => (
+              paginatedRows.map((row) => (
                 <tr key={row.id}>
                   <td className={styles.td}>{row.name}</td>
                   <td className={styles.td}>{new Date(row.created_at).toLocaleDateString("ja-JP")}</td>
@@ -217,6 +237,36 @@ export default function PartnerClient() {
           </tbody>
         </table>
       </div>
+
+      {!loading && filteredRows.length > 0 && (
+        <div className={styles.pagination}>
+          <div className={styles.paginationInfo}>
+            {displayStart}〜{displayEnd}件 / 全{filteredRows.length}件
+          </div>
+
+          <div className={styles.paginationButtons}>
+            <button
+              type="button"
+              className={styles.pageButton}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+            >
+              前へ
+            </button>
+            <span className={styles.pageStatus}>
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className={styles.pageButton}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+            >
+              次へ
+            </button>
+          </div>
+        </div>
+      )}
 
       {msg && !open && <p className={styles.errorText}>{msg}</p>}
 

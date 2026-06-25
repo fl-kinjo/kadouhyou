@@ -54,6 +54,7 @@ type InitialData = {
     salesLabel: string;
     pmLabel: string;
     directorLabel: string;
+    estimateUrl: string | null;
     invoiceUrl: string | null;
     plannedCostApprovedLabel: string;
   };
@@ -446,6 +447,22 @@ export default function ProjectDetailClient({ initialData }: { initialData: Init
 
             <div className={styles.labelCell}>ディレクター</div>
             <div className={styles.valueCell}>{initialData.basicInfo.directorLabel}</div>
+
+            <div className={styles.labelCell}>見積書</div>
+            <div className={styles.valueCell}>
+              {isUrl(initialData.basicInfo.estimateUrl) ? (
+                <a
+                  href={initialData.basicInfo.estimateUrl ?? "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={styles.docLink}
+                >
+                  【見積書】を開く
+                </a>
+              ) : (
+                "-"
+              )}
+            </div>
 
             <div className={styles.labelCell}>請求書</div>
             <div className={styles.valueCell}>

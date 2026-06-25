@@ -23,6 +23,8 @@ type Client = {
   name: string;
 };
 
+const PAGE_SIZE = 20;
+
 const STATUS_OPTIONS = [
   { value: 0, label: "保留" },
   { value: 1, label: "営業中（高）" },
@@ -70,6 +72,7 @@ export default function ProjectClient() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [keyword, setKeyword] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const load = async () => {
@@ -118,6 +121,22 @@ export default function ProjectClient() {
       return searchable.includes(normalizedKeyword);
     });
   }, [clientMap, keyword, projects]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageStartIndex = (currentPage - 1) * PAGE_SIZE;
+  const paginatedRows = rows.slice(pageStartIndex, pageStartIndex + PAGE_SIZE);
+  const displayStart = rows.length === 0 ? 0 : pageStartIndex + 1;
+  const displayEnd = Math.min(pageStartIndex + PAGE_SIZE, rows.length);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [keyword]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const missingInvoiceCount = useMemo(
     () => projects.filter((project) => !(project.invoice ?? "").trim()).length,
@@ -170,6 +189,33 @@ export default function ProjectClient() {
         />
       </div>
 
+      <div className={styles.paginationBar}>
+        <div className={styles.paginationInfo}>
+          {displayStart}〜{displayEnd}件 / 全{rows.length}件
+        </div>
+        <div className={styles.paginationControls}>
+          <button
+            type="button"
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage <= 1}
+          >
+            前へ
+          </button>
+          <span className={styles.paginationPage}>
+            {currentPage} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage >= totalPages}
+          >
+            次へ
+          </button>
+        </div>
+      </div>
+
       <div className={styles.tableFrame}>
         <div className={styles.tableScroll}>
           <table className={styles.table}>
@@ -199,9 +245,9 @@ export default function ProjectClient() {
                   </td>
                 </tr>
               ) : (
-                rows.map((project, index) => (
+                paginatedRows.map((project, index) => (
                   <tr key={project.id}>
-                    <td className={styles.tdSmall}>{index + 1}</td>
+                    <td className={styles.tdSmall}>{pageStartIndex + index + 1}</td>
                     <td className={styles.tdWide}>
                       <Link href={`/project/${project.id}`} className={styles.projectLink}>
                         {project.name}
