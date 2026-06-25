@@ -33,8 +33,8 @@ const MENU_GROUPS = [
       { href: "/summary", label: "案件サマリー" },
       { href: "/summary/sales2", label: "営業サマリー" },
       { href: "/summary/client", label: "クライアント別年間実績" },
-      { href: "/client", label: "クライアント管理", icon: true, adminOnly: true },
-      { href: "/partner", label: "パートナー管理", icon: true, adminOnly: true },
+      { href: "/client", label: "クライアント管理", adminOnly: true },
+      { href: "/partner", label: "パートナー管理", adminOnly: true },
       { href: "/project-request", label: "予定工数申請管理", icon: true, adminOnly: true },
     ],
   },
@@ -55,6 +55,11 @@ type MenuPermissionRow = {
   can_view: boolean | null;
 };
 
+type TeamLeaderRow = {
+  team_id: string;
+  profile_id: string;
+};
+
 function menuPermissionKey(groupKey: string, itemHref = "") {
   return `${groupKey}::${itemHref}`;
 }
@@ -64,10 +69,22 @@ function matchesPath(href: string, pathname: string | null) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function isLeaderAllowedAdminOnlyHref(href: string) {
+  return [
+    "/attendance-management",
+    "/expenses-management",
+    "/project-request",
+    "/employee",
+    "/team",
+    "/job",
+  ].includes(href);
+}
+
 export default function AppHeader() {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [permissionMap, setPermissionMap] = useState<Map<string, boolean>>(new Map());
 
@@ -93,12 +110,16 @@ export default function AppHeader() {
 
         if (authError || !authData.user) {
           setIsAdmin(false);
+          setIsTeamLeader(false);
           setPermissionMap(new Map());
           return;
         }
 
-        const [{ data: profileData, error: profileError }, { data: permissionData, error: permissionError }] =
-          await Promise.all([
+        const [
+          { data: profileData, error: profileError },
+          { data: permissionData, error: permissionError },
+          { data: teamLeaderData, error: teamLeaderError },
+        ] = await Promise.all([
             supabase
               .from("profiles_2")
               .select("is_admin")
@@ -108,12 +129,22 @@ export default function AppHeader() {
               .from("profile_menu_permission")
               .select("menu_group_key,menu_item_href,can_view")
               .eq("profile_id", authData.user.id),
+            supabase
+              .from("team_leader")
+              .select("team_id,profile_id")
+              .eq("profile_id", authData.user.id),
           ]);
 
         if (profileError) {
           setIsAdmin(false);
         } else {
           setIsAdmin(profileData?.is_admin === 1);
+        }
+
+        if (teamLeaderError) {
+          setIsTeamLeader(false);
+        } else {
+          setIsTeamLeader(((teamLeaderData ?? []) as TeamLeaderRow[]).length > 0);
         }
 
         if (permissionError) {
@@ -144,13 +175,17 @@ export default function AppHeader() {
       return {
         ...group,
         items: group.items.filter((item) => {
-          if (!groupCanView) return false;
-          if ("adminOnly" in item && item.adminOnly && !isAdmin) return false;
+          const isLeaderRequiredMenu = isTeamLeader && isLeaderAllowedAdminOnlyHref(item.href);
+
+          if (!groupCanView && !isLeaderRequiredMenu) return false;
+          if ("adminOnly" in item && item.adminOnly && !isAdmin && !isLeaderRequiredMenu) return false;
+          if (isLeaderRequiredMenu) return true;
+
           return permissionMap.get(menuPermissionKey(group.key, item.href)) !== false;
         }),
       };
     }).filter((group) => group.items.length > 0);
-  }, [isAdmin, permissionMap]);
+  }, [isAdmin, isTeamLeader, permissionMap]);
 
   const controlledMenuItem = useMemo(() => {
     const items = MENU_GROUPS.flatMap((group) => group.items.map((item) => ({ groupKey: group.key, ...item })));

@@ -40,11 +40,33 @@ type Project = {
   invoice: string | null;
   project_manager_id: string | null;
   planned_cost_approval_status: number | null;
+  planned_cost_requested_by: string | null;
 };
 
 type ProjectMember = {
   project_id: string;
   profile_id: string;
+};
+
+type TeamLeaderRow = {
+  team_id: string;
+  profile_id: string;
+};
+
+type ProfileTeamRow = {
+  profile_id: string;
+  team_id: string;
+};
+
+type ProfileMenuPermissionRow = {
+  menu_group_key: string;
+  menu_item_href: string | null;
+  can_view: boolean | null;
+};
+
+type TeamRow = {
+  id: string;
+  parent_id: string | null;
 };
 
 type ClientRow = {
@@ -82,6 +104,7 @@ type LeaveRequestRow = {
   approval_status: number;
   request_group_id: string;
   updated_at: string;
+  reviewed_at: string | null;
 };
 
 type AttendanceCorrectionRequestRow = {
@@ -102,6 +125,7 @@ type ProjectActualCostRow = {
   application_status: number;
   request_group_id: string | null;
   updated_at: string;
+  reviewed_at: string | null;
 };
 
 type AlertSource = {
@@ -255,6 +279,51 @@ function isFullDayLeave(leaveType: number | null | undefined) {
   return FULL_DAY_LEAVE_TYPES.has(leaveType ?? -1);
 }
 
+function menuPermissionKey(groupKey: string, itemHref = "") {
+  return `${groupKey}::${itemHref}`;
+}
+
+function canViewMenu(
+  permissionMap: Record<string, boolean>,
+  groupKey: string,
+  itemHref = "",
+) {
+  return (
+    permissionMap[menuPermissionKey(groupKey)] !== false &&
+    permissionMap[menuPermissionKey(groupKey, itemHref)] !== false
+  );
+}
+
+function getLeaderEffectiveTeamIds(leaderTeamIds: Set<string>, teams: TeamRow[]) {
+  const result = new Set(leaderTeamIds);
+  const walk = (parentId: string) => {
+    for (const team of teams) {
+      if (team.parent_id !== parentId || result.has(team.id)) continue;
+      result.add(team.id);
+      walk(team.id);
+    }
+  };
+
+  for (const teamId of leaderTeamIds) {
+    walk(teamId);
+  }
+
+  return result;
+}
+
+function getLeaderManagedProfileIds(effectiveTeamIds: Set<string>, profileTeams: ProfileTeamRow[]) {
+  const result = new Set<string>();
+  if (effectiveTeamIds.size === 0) return result;
+
+  for (const relation of profileTeams) {
+    if (effectiveTeamIds.has(relation.team_id)) {
+      result.add(relation.profile_id);
+    }
+  }
+
+  return result;
+}
+
 export default function TopClient() {
   const supabase = createClient();
 
@@ -262,6 +331,7 @@ export default function TopClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<AlertItem | null>(null);
 
@@ -309,6 +379,7 @@ export default function TopClient() {
     ProjectActualCostRow[]
   >([]);
   const [holidaySet, setHolidaySet] = useState<Set<string>>(new Set());
+  const [menuPermissionMap, setMenuPermissionMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -357,8 +428,51 @@ export default function TopClient() {
 
       if (profileError) throw new Error(profileError.message);
 
+      const { data: menuPermissionData, error: menuPermissionError } =
+        await supabase
+          .from("profile_menu_permission")
+          .select("menu_group_key,menu_item_href,can_view")
+          .eq("profile_id", userId);
+
+      if (menuPermissionError) throw new Error(menuPermissionError.message);
+
+      const nextMenuPermissionMap: Record<string, boolean> = {};
+      for (const row of
+        (menuPermissionData ?? []) as ProfileMenuPermissionRow[]) {
+        nextMenuPermissionMap[
+          menuPermissionKey(row.menu_group_key, row.menu_item_href ?? "")
+        ] = row.can_view !== false;
+      }
+      setMenuPermissionMap(nextMenuPermissionMap);
+
       const currentProfile = (profileData ?? null) as Profile | null;
       const isAdmin = currentProfile?.is_admin === 1;
+
+      const [
+        { data: teamLeaderData, error: teamLeaderError },
+        { data: teamData, error: teamError },
+        { data: profileTeamData, error: profileTeamError },
+      ] = await Promise.all([
+        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", userId),
+        supabase.from("team").select("id,parent_id"),
+        supabase.from("profile_team").select("profile_id,team_id"),
+      ]);
+
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
+      if (teamError) throw new Error(teamError.message);
+      if (profileTeamError) throw new Error(profileTeamError.message);
+
+      const leaderTeamIds = new Set(((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id));
+      const nextIsTeamLeader = leaderTeamIds.size > 0;
+      const canReviewRequests = isAdmin || nextIsTeamLeader;
+      const leaderEffectiveTeamIds = getLeaderEffectiveTeamIds(leaderTeamIds, (teamData ?? []) as TeamRow[]);
+      const leaderManagedProfileIds = getLeaderManagedProfileIds(leaderEffectiveTeamIds, (profileTeamData ?? []) as ProfileTeamRow[]);
+      const canReviewProfile = (profileId: string | null | undefined) => {
+        if (!profileId) return false;
+        return isAdmin || leaderManagedProfileIds.has(profileId);
+      };
+
+      setIsTeamLeader(nextIsTeamLeader);
 
       const emptyLeaveResult = Promise.resolve({
         data: [] as LeaveRequestRow[],
@@ -415,7 +529,7 @@ export default function TopClient() {
         supabase
           .from("project")
           .select(
-            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status",
+            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status,planned_cost_requested_by",
           )
           .order("updated_at", { ascending: false }),
         supabase.from("project_member").select("project_id,profile_id"),
@@ -432,29 +546,30 @@ export default function TopClient() {
         supabase
           .from("leave_request")
           .select(
-            "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at",
+            "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at,reviewed_at",
           )
           .eq("profile_id", userId)
           .eq("approval_status", 1)
           .gte("work_date", alertRangeStartKey)
           .lte("work_date", yesterdayKey),
-        isAdmin
+        canReviewRequests
           ? supabase
               .from("leave_request")
               .select(
-                "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at",
+                "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at,reviewed_at",
               )
               .eq("approval_status", 0)
           : emptyLeaveResult,
         supabase
           .from("leave_request")
           .select(
-            "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at",
+            "id,profile_id,work_date,leave_type,approval_status,request_group_id,updated_at,reviewed_at",
           )
           .eq("profile_id", userId)
           .in("approval_status", [1, 2])
-          .gte("updated_at", decisionSince),
-        isAdmin
+          .not("reviewed_at", "is", null)
+          .gte("reviewed_at", decisionSince),
+        canReviewRequests
           ? supabase
               .from("attendance_correction_request")
               .select(
@@ -471,22 +586,23 @@ export default function TopClient() {
           .in("approval_status", [1, 2])
           .not("reviewed_at", "is", null)
           .gte("reviewed_at", decisionSince),
-        isAdmin
+        canReviewRequests
           ? supabase
               .from("project_actual_cost")
               .select(
-                "id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at",
+                "id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at,reviewed_at",
               )
               .eq("application_status", 0)
           : emptyExpenseResult,
         supabase
           .from("project_actual_cost")
           .select(
-            "id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at",
+            "id,profile_id,expense_date,amount,purpose,application_status,request_group_id,updated_at,reviewed_at",
           )
           .eq("profile_id", userId)
           .in("application_status", [1, 2])
-          .gte("updated_at", decisionSince),
+          .not("reviewed_at", "is", null)
+          .gte("reviewed_at", decisionSince),
         fetchJapaneseHolidaySetSafe(),
       ]);
 
@@ -525,16 +641,20 @@ export default function TopClient() {
       );
       setReportRows((reportData ?? []) as ReportRow[]);
       setApprovedLeaveRows((approvedLeaveData ?? []) as LeaveRequestRow[]);
-      setPendingLeaveRows((pendingLeaveData ?? []) as LeaveRequestRow[]);
+      const rawPendingLeaveRows = (pendingLeaveData ?? []) as LeaveRequestRow[];
+      const rawPendingCorrectionRows = (pendingCorrectionData ?? []) as AttendanceCorrectionRequestRow[];
+      const rawPendingExpenseRows = (pendingExpenseData ?? []) as ProjectActualCostRow[];
+
+      setPendingLeaveRows(rawPendingLeaveRows.filter((row) => canReviewProfile(row.profile_id)));
       setDecisionLeaveRows((decisionLeaveData ?? []) as LeaveRequestRow[]);
       setPendingCorrectionRows(
-        (pendingCorrectionData ?? []) as AttendanceCorrectionRequestRow[],
+        rawPendingCorrectionRows.filter((row) => canReviewProfile(row.profile_id)),
       );
       setDecisionCorrectionRows(
         (decisionCorrectionData ?? []) as AttendanceCorrectionRequestRow[],
       );
       setPendingExpenseRows(
-        (pendingExpenseData ?? []) as ProjectActualCostRow[],
+        rawPendingExpenseRows.filter((row) => canReviewProfile(row.profile_id)),
       );
       setDecisionExpenseRows(
         (decisionExpenseData ?? []) as ProjectActualCostRow[],
@@ -579,7 +699,9 @@ export default function TopClient() {
       );
       setPendingPlannedCostApprovalProjects(
         projects.filter(
-          (project) => project.planned_cost_approval_status === 1,
+          (project) =>
+            project.planned_cost_approval_status === 1 &&
+            canReviewProfile(project.planned_cost_requested_by),
         ),
       );
     } catch (error) {
@@ -827,140 +949,175 @@ export default function TopClient() {
       href: `/project/${project.id}`,
     });
 
+    const canViewProject = canViewMenu(menuPermissionMap, "project", "/project");
+    const canViewReport = canViewMenu(menuPermissionMap, "attendance", "/report");
+    const canViewAttendance = canViewMenu(
+      menuPermissionMap,
+      "attendance",
+      "/attendance",
+    );
+    const canViewLeaveRequest = canViewMenu(
+      menuPermissionMap,
+      "attendance",
+      "/leave-request",
+    );
+    const canViewAttendanceManagement = canViewMenu(
+      menuPermissionMap,
+      "attendance",
+      "/attendance-management",
+    );
+    const canViewExpenses = canViewMenu(menuPermissionMap, "request", "/expenses");
+    const canViewExpensesManagement = canViewMenu(
+      menuPermissionMap,
+      "request",
+      "/expenses-management",
+    );
+    const canViewProjectRequest = canViewMenu(
+      menuPermissionMap,
+      "project",
+      "/project-request",
+    );
+
     const invoiceRequiredProjects = assignedProjects.filter((project) =>
       [5, 6, 7].includes(project.status ?? -1),
     );
 
-    const currentMonthFirstDay = getMonthStart(today);
-    const overdueInvoiceProjects = invoiceRequiredProjects.filter((project) => {
-      if (!project.invoice_month) return false;
-      const invoiceMonthDate = new Date(`${project.invoice_month}T00:00:00`);
-      if (Number.isNaN(invoiceMonthDate.getTime())) return false;
-      return (
-        invoiceMonthDate < currentMonthFirstDay && isBlank(project.invoice)
+    if (canViewProject) {
+      const currentMonthFirstDay = getMonthStart(today);
+      const overdueInvoiceProjects = invoiceRequiredProjects.filter((project) => {
+        if (!project.invoice_month) return false;
+        const invoiceMonthDate = new Date(`${project.invoice_month}T00:00:00`);
+        if (Number.isNaN(invoiceMonthDate.getTime())) return false;
+        return (
+          invoiceMonthDate < currentMonthFirstDay && isBlank(project.invoice)
+        );
+      });
+
+      if (overdueInvoiceProjects.length > 0) {
+        projectItems.push({
+          title: `請求月超過・請求書未アップが${overdueInvoiceProjects.length}件あります`,
+          description: formatNameSummary(
+            overdueInvoiceProjects.map((project) => project.name),
+          ),
+          sources: overdueInvoiceProjects.map((project) =>
+            createProjectSource(project, "overdue-invoice"),
+          ),
+        });
+      }
+
+      const plannedCostProjectSet = new Set(
+        projectPlannedCosts
+          .filter(
+            (row) =>
+              row.project_id &&
+              (toNumber(row.operating_person_months) > 0 || row.amount != null),
+          )
+          .map((row) => row.project_id),
       );
-    });
 
-    if (overdueInvoiceProjects.length > 0) {
-      projectItems.push({
-        title: `請求月超過・請求書未アップが${overdueInvoiceProjects.length}件あります`,
-        description: formatNameSummary(
-          overdueInvoiceProjects.map((project) => project.name),
-        ),
-        sources: overdueInvoiceProjects.map((project) =>
-          createProjectSource(project, "overdue-invoice"),
-        ),
-      });
-    }
+      const noPlannedCostProjects = invoiceRequiredProjects.filter(
+        (project) => !plannedCostProjectSet.has(project.id),
+      );
 
-    const plannedCostProjectSet = new Set(
-      projectPlannedCosts
-        .filter(
-          (row) =>
-            row.project_id &&
-            (toNumber(row.operating_person_months) > 0 || row.amount != null),
-        )
-        .map((row) => row.project_id),
-    );
-
-    const noPlannedCostProjects = invoiceRequiredProjects.filter(
-      (project) => !plannedCostProjectSet.has(project.id),
-    );
-
-    if (noPlannedCostProjects.length > 0) {
-      projectItems.push({
-        title: `予定工数未入力の案件が${noPlannedCostProjects.length}件あります`,
-        description: formatNameSummary(
-          noPlannedCostProjects.map((project) => project.name),
-        ),
-        sources: noPlannedCostProjects.map((project) =>
-          createProjectSource(project, "no-planned-cost"),
-        ),
-      });
-    }
-
-    const noInvoiceAmountProjects = invoiceRequiredProjects.filter(
-      (project) => project.invoice_amount == null,
-    );
-
-    if (noInvoiceAmountProjects.length > 0) {
-      projectItems.push({
-        title: `請求金額未入力の案件が${noInvoiceAmountProjects.length}件あります`,
-        description: formatNameSummary(
-          noInvoiceAmountProjects.map((project) => project.name),
-        ),
-        sources: noInvoiceAmountProjects.map((project) =>
-          createProjectSource(project, "no-invoice-amount"),
-        ),
-      });
-    }
-
-    const missingReportDates: string[] = [];
-    let reportCursor = new Date(prevWeekStart);
-    while (reportCursor <= prevWeekEnd) {
-      const dateKey = getTodayDateString(reportCursor);
-      const leave = leaveMap.get(dateKey);
-      const shouldSkip =
-        !isBusinessDay(reportCursor, holidaySet) ||
-        isFullDayLeave(leave?.leave_type);
-
-      if (!shouldSkip && (reportHoursByDate.get(dateKey) ?? 0) <= 0) {
-        missingReportDates.push(dateKey);
+      if (noPlannedCostProjects.length > 0) {
+        projectItems.push({
+          title: `予定工数未入力の案件が${noPlannedCostProjects.length}件あります`,
+          description: formatNameSummary(
+            noPlannedCostProjects.map((project) => project.name),
+          ),
+          sources: noPlannedCostProjects.map((project) =>
+            createProjectSource(project, "no-planned-cost"),
+          ),
+        });
       }
 
-      reportCursor = addDays(reportCursor, 1);
+      const noInvoiceAmountProjects = invoiceRequiredProjects.filter(
+        (project) => project.invoice_amount == null,
+      );
+
+      if (noInvoiceAmountProjects.length > 0) {
+        projectItems.push({
+          title: `請求金額未入力の案件が${noInvoiceAmountProjects.length}件あります`,
+          description: formatNameSummary(
+            noInvoiceAmountProjects.map((project) => project.name),
+          ),
+          sources: noInvoiceAmountProjects.map((project) =>
+            createProjectSource(project, "no-invoice-amount"),
+          ),
+        });
+      }
     }
 
-    if (missingReportDates.length > 0) {
-      workItems.push({
-        title: `先週分の業務報告未入力が${missingReportDates.length}日あります`,
-        description: formatDateArraySummary(missingReportDates),
-        sources: missingReportDates.map((dateKey) => ({
-          id: `missing-report-${dateKey}`,
-          title: formatDateSlash(dateKey),
-          description: "業務報告未入力",
-          href: `/report?date=${dateKey}`,
-        })),
-      });
-    }
+    if (canViewReport) {
+      const missingReportDates: string[] = [];
+      let reportCursor = new Date(prevWeekStart);
+      while (reportCursor <= prevWeekEnd) {
+        const dateKey = getTodayDateString(reportCursor);
+        const leave = leaveMap.get(dateKey);
+        const shouldSkip =
+          !isBusinessDay(reportCursor, holidaySet) ||
+          isFullDayLeave(leave?.leave_type);
 
-    const attendanceMap = new Map(
-      attendanceMonthRows.map((row) => [row.work_date, row]),
-    );
-    const missingAttendanceDates: string[] = [];
-    let attendanceCursor = new Date(currentMonthStart);
-    while (attendanceCursor <= yesterday) {
-      const dateKey = getTodayDateString(attendanceCursor);
-      const leave = leaveMap.get(dateKey);
-      const shouldSkip =
-        !isBusinessDay(attendanceCursor, holidaySet) ||
-        isFullDayLeave(leave?.leave_type);
-      const dayAttendance = attendanceMap.get(dateKey);
+        if (!shouldSkip && (reportHoursByDate.get(dateKey) ?? 0) <= 0) {
+          missingReportDates.push(dateKey);
+        }
 
-      if (
-        !shouldSkip &&
-        (!dayAttendance || !dayAttendance.start_time || !dayAttendance.end_time)
-      ) {
-        missingAttendanceDates.push(dateKey);
+        reportCursor = addDays(reportCursor, 1);
       }
 
-      attendanceCursor = addDays(attendanceCursor, 1);
+      if (missingReportDates.length > 0) {
+        workItems.push({
+          title: `先週分の業務報告未入力が${missingReportDates.length}日あります`,
+          description: formatDateArraySummary(missingReportDates),
+          sources: missingReportDates.map((dateKey) => ({
+            id: `missing-report-${dateKey}`,
+            title: formatDateSlash(dateKey),
+            description: "業務報告未入力",
+            href: `/report?date=${dateKey}`,
+          })),
+        });
+      }
     }
 
-    if (missingAttendanceDates.length > 0) {
-      workItems.push({
-        title: `勤怠の未入力が${missingAttendanceDates.length}日あります`,
-        description: `当月過去分: ${formatDateArraySummary(missingAttendanceDates)}`,
-        sources: missingAttendanceDates.map((dateKey) => ({
-          id: `missing-attendance-${dateKey}`,
-          title: formatDateSlash(dateKey),
-          description: "勤怠未入力",
-          href: `/attendance?date=${dateKey}`,
-        })),
-      });
+    if (canViewAttendance) {
+      const attendanceMap = new Map(
+        attendanceMonthRows.map((row) => [row.work_date, row]),
+      );
+      const missingAttendanceDates: string[] = [];
+      let attendanceCursor = new Date(currentMonthStart);
+      while (attendanceCursor <= yesterday) {
+        const dateKey = getTodayDateString(attendanceCursor);
+        const leave = leaveMap.get(dateKey);
+        const shouldSkip =
+          !isBusinessDay(attendanceCursor, holidaySet) ||
+          isFullDayLeave(leave?.leave_type);
+        const dayAttendance = attendanceMap.get(dateKey);
+
+        if (
+          !shouldSkip &&
+          (!dayAttendance || !dayAttendance.start_time || !dayAttendance.end_time)
+        ) {
+          missingAttendanceDates.push(dateKey);
+        }
+
+        attendanceCursor = addDays(attendanceCursor, 1);
+      }
+
+      if (missingAttendanceDates.length > 0) {
+        workItems.push({
+          title: `勤怠の未入力が${missingAttendanceDates.length}日あります`,
+          description: `当月過去分: ${formatDateArraySummary(missingAttendanceDates)}`,
+          sources: missingAttendanceDates.map((dateKey) => ({
+            id: `missing-attendance-${dateKey}`,
+            title: formatDateSlash(dateKey),
+            description: "勤怠未入力",
+            href: `/attendance?date=${dateKey}`,
+          })),
+        });
+      }
     }
 
-    if (profile?.is_admin === 1) {
+    if (profile?.is_admin === 1 || isTeamLeader) {
       const pendingLeaveGroups = new Map<string, LeaveRequestRow[]>();
       for (const row of pendingLeaveRows) {
         const key = row.request_group_id;
@@ -970,9 +1127,8 @@ export default function TopClient() {
         ]);
       }
 
-      const pendingLeaveSources: AlertSource[] = Array.from(
-        pendingLeaveGroups.entries(),
-      ).map(([groupId, rows]) => {
+      const pendingLeaveSources: AlertSource[] = canViewAttendanceManagement
+        ? Array.from(pendingLeaveGroups.entries()).map(([groupId, rows]) => {
         const dateKeys = Array.from(
           new Set(rows.map((row) => row.work_date)),
         ).sort();
@@ -982,16 +1138,17 @@ export default function TopClient() {
           description: "未対応",
           href: "/attendance-management",
         };
-      });
+      })
+        : [];
 
-      const pendingCorrectionSources: AlertSource[] = pendingCorrectionRows.map(
-        (row) => ({
-          id: `pending-correction-${row.id}`,
-          title: `打刻変更申請 ${formatDateSlash(row.work_date)}`,
-          description: "未対応",
-          href: "/attendance-management",
-        }),
-      );
+      const pendingCorrectionSources: AlertSource[] = canViewAttendanceManagement
+        ? pendingCorrectionRows.map((row) => ({
+            id: `pending-correction-${row.id}`,
+            title: `打刻変更申請 ${formatDateSlash(row.work_date)}`,
+            description: "未対応",
+            href: "/attendance-management",
+          }))
+        : [];
 
       const pendingExpenseGroups = new Map<string, ProjectActualCostRow[]>();
       for (const row of pendingExpenseRows) {
@@ -1002,9 +1159,8 @@ export default function TopClient() {
         ]);
       }
 
-      const pendingExpenseSources: AlertSource[] = Array.from(
-        pendingExpenseGroups.entries(),
-      ).map(([groupId, rows]) => {
+      const pendingExpenseSources: AlertSource[] = canViewExpensesManagement
+        ? Array.from(pendingExpenseGroups.entries()).map(([groupId, rows]) => {
         const first = rows[0];
         return {
           id: `pending-expense-${groupId}`,
@@ -1017,12 +1173,13 @@ export default function TopClient() {
           ].join(" / "),
           href: "/expenses-management",
         };
-      });
+      })
+        : [];
 
       if (pendingLeaveSources.length > 0) {
         requestItems.push({
           title: `休暇申請の未対応が${pendingLeaveSources.length}件あります`,
-          description: "管理者対応が必要です。",
+          description: "承認対応が必要です。",
           sources: pendingLeaveSources,
         });
       }
@@ -1030,7 +1187,7 @@ export default function TopClient() {
       if (pendingCorrectionSources.length > 0) {
         requestItems.push({
           title: `打刻変更申請の未対応が${pendingCorrectionSources.length}件あります`,
-          description: "管理者対応が必要です。",
+          description: "承認対応が必要です。",
           sources: pendingCorrectionSources,
         });
       }
@@ -1038,12 +1195,12 @@ export default function TopClient() {
       if (pendingExpenseSources.length > 0) {
         requestItems.push({
           title: `経費申請の未対応が${pendingExpenseSources.length}件あります`,
-          description: "管理者対応が必要です。",
+          description: "承認対応が必要です。",
           sources: pendingExpenseSources,
         });
       }
 
-      if (pendingPlannedCostApprovalProjects.length > 0) {
+      if (canViewProjectRequest && pendingPlannedCostApprovalProjects.length > 0) {
         requestItems.push({
           title: `予定工数確認依頼の未対応が${pendingPlannedCostApprovalProjects.length}件あります`,
           description: formatNameSummary(
@@ -1074,6 +1231,7 @@ export default function TopClient() {
       (row) => row.approval_status === 2,
     );
     if (
+      canViewLeaveRequest &&
       approvedLeaveRowsForNotice.length + rejectedLeaveRowsForNotice.length >
       0
     ) {
@@ -1099,6 +1257,7 @@ export default function TopClient() {
       (row) => row.approval_status === 2,
     );
     if (
+      canViewAttendance &&
       approvedCorrectionRowsForNotice.length +
         rejectedCorrectionRowsForNotice.length >
       0
@@ -1125,6 +1284,7 @@ export default function TopClient() {
       (row) => row.application_status === 2,
     );
     if (
+      canViewExpenses &&
       approvedExpenseRowsForNotice.length +
         rejectedExpenseRowsForNotice.length >
       0
@@ -1166,6 +1326,8 @@ export default function TopClient() {
     pendingLeaveRows,
     pendingPlannedCostApprovalProjects,
     profile?.is_admin,
+    isTeamLeader,
+    menuPermissionMap,
     projectPlannedCosts,
     reportRows,
   ]);

@@ -31,6 +31,11 @@ type ProfileTeam = {
   team_id: string;
 };
 
+type TeamLeader = {
+  team_id: string;
+  profile_id: string;
+};
+
 type ProfileJob = {
   profile_id: string;
   job_id: string;
@@ -174,13 +179,16 @@ export default function EmployeeClient() {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [warningMsg, setWarningMsg] = useState("");
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [profileTeams, setProfileTeams] = useState<ProfileTeam[]>([]);
   const [profileJobs, setProfileJobs] = useState<ProfileJob[]>([]);
+  const [teamLeaders, setTeamLeaders] = useState<TeamLeader[]>([]);
   const [manMonths, setManMonths] = useState<ManMonth[]>([]);
 
   const [open, setOpen] = useState(false);
@@ -273,6 +281,7 @@ export default function EmployeeClient() {
         { data: profileTeamData, error: profileTeamError },
         { data: profileJobData, error: profileJobError },
         { data: manMonthData, error: manMonthError },
+        { data: teamLeaderData, error: teamLeaderError },
       ] = await Promise.all([
         supabase.from("profiles_2").select("id,is_admin").eq("id", authUserId).maybeSingle(),
         supabase
@@ -287,6 +296,7 @@ export default function EmployeeClient() {
           .from("man_month")
           .select("profile_id,target_year_month,operating_person_months")
           .eq("target_year_month", getCurrentTargetYearMonth()),
+        supabase.from("team_leader").select("team_id,profile_id"),
       ]);
 
       if (currentProfileError) throw new Error(currentProfileError.message);
@@ -296,9 +306,17 @@ export default function EmployeeClient() {
       if (profileTeamError) throw new Error(profileTeamError.message);
       if (profileJobError) throw new Error(profileJobError.message);
       if (manMonthError) throw new Error(manMonthError.message);
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
 
       const currentIsAdmin = currentProfile?.is_admin === 1;
+      const nextTeamLeaders = (teamLeaderData ?? []) as TeamLeader[];
+      const currentLeaderTeamIds = nextTeamLeaders
+        .filter((leader) => leader.profile_id === authUserId)
+        .map((leader) => leader.team_id);
+
+      setCurrentProfileId(authUserId);
       setIsAdmin(currentIsAdmin);
+      setIsTeamLeader(currentLeaderTeamIds.length > 0);
 
       const nextProfiles = (profileData ?? []) as Profile[];
       const nextTeams = (teamData ?? []) as Team[];
@@ -312,6 +330,7 @@ export default function EmployeeClient() {
       setJobs(nextJobs);
       setProfileTeams(nextProfileTeams);
       setProfileJobs(nextProfileJobs);
+      setTeamLeaders(nextTeamLeaders);
       setManMonths(nextManMonths);
 
       const hasUnregisteredUser = nextProfiles.some(
@@ -331,6 +350,56 @@ export default function EmployeeClient() {
   useEffect(() => {
     load();
   }, []);
+
+  const leaderTeamIds = useMemo(() => {
+    if (!currentProfileId) return new Set<string>();
+    return new Set(teamLeaders.filter((leader) => leader.profile_id === currentProfileId).map((leader) => leader.team_id));
+  }, [currentProfileId, teamLeaders]);
+
+  const leaderEffectiveTeamIds = useMemo(() => {
+    const result = new Set(leaderTeamIds);
+    const childrenByParent = new Map<string | null, Team[]>();
+
+    for (const team of teams) {
+      const parentId = team.parent_id ?? null;
+      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+      childrenByParent.get(parentId)!.push(team);
+    }
+
+    const walk = (teamId: string) => {
+      for (const child of childrenByParent.get(teamId) ?? []) {
+        if (result.has(child.id)) continue;
+        result.add(child.id);
+        walk(child.id);
+      }
+    };
+
+    for (const teamId of leaderTeamIds) {
+      walk(teamId);
+    }
+
+    return result;
+  }, [leaderTeamIds, teams]);
+
+  const leaderManagedProfileIds = useMemo(() => {
+    const result = new Set<string>();
+    if (leaderEffectiveTeamIds.size === 0) return result;
+
+    for (const relation of profileTeams) {
+      if (leaderEffectiveTeamIds.has(relation.team_id)) {
+        result.add(relation.profile_id);
+      }
+    }
+
+    return result;
+  }, [leaderEffectiveTeamIds, profileTeams]);
+
+  const canManageMenuForProfile = (profileId: string) => {
+    if (isAdmin) return true;
+    return leaderManagedProfileIds.has(profileId);
+  };
+
+  const showOperationColumn = isAdmin || isTeamLeader;
 
   const rows = useMemo<EmployeeRow[]>(() => {
     const teamPathHelper = buildTeamPathMap(teams);
@@ -366,6 +435,7 @@ export default function EmployeeClient() {
 
     return profiles
       .filter((profile) => {
+        if (!isAdmin && !leaderManagedProfileIds.has(profile.id)) return false;
         const status = normalizeStatusValue(profile.status);
         return visibleStatuses.includes(status) && !isBlank(profile.last_name) && !isBlank(profile.first_name);
       })
@@ -389,7 +459,7 @@ export default function EmployeeClient() {
         status: normalizeStatusValue(profile.status),
         created_at: profile.created_at,
       }));
-  }, [jobs, profileJobs, profiles, profileTeams, teams, visibleStatuses]);
+  }, [isAdmin, jobs, leaderManagedProfileIds, profileJobs, profiles, profileTeams, teams, visibleStatuses]);
 
   const unregisteredProfiles = useMemo(() => {
     return profiles
@@ -507,7 +577,10 @@ export default function EmployeeClient() {
 
 
   const openMenuPermission = async (profileId: string) => {
-    if (!isAdmin) return;
+    if (!canManageMenuForProfile(profileId)) {
+      setErrorMsg("画面管理権限がありません。");
+      return;
+    }
 
     setErrorMsg("");
     setMenuTargetProfileId(profileId);
@@ -577,12 +650,12 @@ export default function EmployeeClient() {
   };
 
   const saveMenuPermissions = async () => {
-    if (!isAdmin) {
-      setErrorMsg("編集権限がありません。");
-      return;
-    }
     if (!menuTargetProfileId) {
       setErrorMsg("画面管理対象のユーザーを取得できません。");
+      return;
+    }
+    if (!canManageMenuForProfile(menuTargetProfileId)) {
+      setErrorMsg("画面管理権限がありません。");
       return;
     }
 
@@ -877,19 +950,19 @@ export default function EmployeeClient() {
                 <th className={styles.thWide}>所属組織</th>
                 <th className={styles.th}>職種</th>
                 <th className={styles.th}>在籍状況</th>
-                {isAdmin && <th className={styles.thRight}>操作</th>}
+                {showOperationColumn && <th className={styles.thRight}>操作</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td className={styles.td} colSpan={isAdmin ? 7 : 6}>
+                  <td className={styles.td} colSpan={showOperationColumn ? 7 : 6}>
                     読み込み中...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td className={styles.td} colSpan={isAdmin ? 7 : 6}>
+                  <td className={styles.td} colSpan={showOperationColumn ? 7 : 6}>
                     表示対象のユーザーがいません。
                   </td>
                 </tr>
@@ -902,25 +975,29 @@ export default function EmployeeClient() {
                     <td className={styles.tdWide}>{row.team_paths}</td>
                     <td className={styles.td}>{row.jobs}</td>
                     <td className={styles.td}>{statusValueToLabel(row.status)}</td>
-                    {isAdmin && (
+                    {showOperationColumn && (
                       <td className={styles.tdRight}>
                         <div className={styles.operationButtons}>
-                          <button
-                            type="button"
-                            onClick={() => openEdit(row.profile_id)}
-                            className={styles.btnSmall}
-                            disabled={saving || menuSaving}
-                          >
-                            編集
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openMenuPermission(row.profile_id)}
-                            className={styles.btnSmall}
-                            disabled={saving || menuSaving}
-                          >
-                            画面管理
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(row.profile_id)}
+                              className={styles.btnSmall}
+                              disabled={saving || menuSaving}
+                            >
+                              編集
+                            </button>
+                          )}
+                          {canManageMenuForProfile(row.profile_id) && (
+                            <button
+                              type="button"
+                              onClick={() => openMenuPermission(row.profile_id)}
+                              className={styles.btnSmall}
+                              disabled={saving || menuSaving}
+                            >
+                              画面管理
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -1114,7 +1191,7 @@ export default function EmployeeClient() {
       )}
 
 
-      {menuOpen && isAdmin && (
+      {menuOpen && menuTargetProfileId && canManageMenuForProfile(menuTargetProfileId) && (
         <div className={styles.modalOverlay} onClick={closeMenuModal}>
           <div className={styles.menuModalCard} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>

@@ -10,13 +10,26 @@ export default async function AttendanceManagementPage() {
     redirect("/login");
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles_2")
-    .select("id,is_admin")
-    .eq("id", authData.user.id)
-    .maybeSingle();
+  const [
+    { data: profile, error: profileError },
+    { data: teamLeaderData, error: teamLeaderError },
+  ] = await Promise.all([
+    supabase
+      .from("profiles_2")
+      .select("id,is_admin")
+      .eq("id", authData.user.id)
+      .maybeSingle(),
+    supabase
+      .from("team_leader")
+      .select("id")
+      .eq("profile_id", authData.user.id)
+      .limit(1),
+  ]);
 
-  if (profileError || !profile || profile.is_admin !== 1) {
+  const isAdmin = profile?.is_admin === 1;
+  const isTeamLeader = (teamLeaderData?.length ?? 0) > 0;
+
+  if (profileError || teamLeaderError || !profile || (!isAdmin && !isTeamLeader)) {
     redirect("/");
   }
 

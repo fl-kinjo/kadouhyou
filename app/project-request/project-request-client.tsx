@@ -14,6 +14,7 @@ type ProjectRow = {
   planned_cost_requested_at: string | null;
   planned_cost_reviewed_at: string | null;
   planned_cost_reviewed_by: string | null;
+  planned_cost_requested_by: string | null;
 };
 
 type ClientRow = {
@@ -32,6 +33,21 @@ type PlannedCostRow = {
 type ProfileRow = {
   id: string;
   is_admin: number | boolean | null;
+};
+
+type TeamLeaderRow = {
+  team_id: string;
+  profile_id: string;
+};
+
+type ProfileTeamRow = {
+  profile_id: string;
+  team_id: string;
+};
+
+type TeamRow = {
+  id: string;
+  parent_id: string | null;
 };
 
 type RequestRow = ProjectRow & {
@@ -124,10 +140,14 @@ export default function ProjectRequestClient() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [plannedCosts, setPlannedCosts] = useState<PlannedCostRow[]>([]);
+  const [requesterProfileTeams, setRequesterProfileTeams] = useState<ProfileTeamRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [leaderTeamIds, setLeaderTeamIds] = useState<Set<string>>(new Set());
   const [actionProjectId, setActionProjectId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -141,23 +161,36 @@ export default function ProjectRequestClient() {
       const userId = authData.user?.id;
       if (!userId) throw new Error("ログインユーザーを取得できません。");
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles_2")
-        .select("id,is_admin")
-        .eq("id", userId)
-        .maybeSingle();
+      const [
+        { data: profileData, error: profileError },
+        { data: teamLeaderData, error: teamLeaderError },
+      ] = await Promise.all([
+        supabase
+          .from("profiles_2")
+          .select("id,is_admin")
+          .eq("id", userId)
+          .maybeSingle(),
+        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", userId),
+      ]);
 
       if (profileError) throw new Error(profileError.message);
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
 
       const profile = (profileData ?? null) as ProfileRow | null;
       const nextIsAdmin = profile?.is_admin === true || profile?.is_admin === 1;
-      setIsAdmin(nextIsAdmin);
+      const nextLeaderTeamIds = new Set(((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id));
+      const nextIsTeamLeader = nextLeaderTeamIds.size > 0;
 
-      if (!nextIsAdmin) {
+      setIsAdmin(nextIsAdmin);
+      setIsTeamLeader(nextIsTeamLeader);
+      setLeaderTeamIds(nextLeaderTeamIds);
+
+      if (!nextIsAdmin && !nextIsTeamLeader) {
         setProjects([]);
         setClients([]);
         setPlannedCosts([]);
-        setMessage("案件申請管理は管理者のみ利用できます。");
+        setRequesterProfileTeams([]);
+        setMessage("案件申請管理は管理者または所属組織リーダーのみ利用できます。");
         return;
       }
 
@@ -166,12 +199,15 @@ export default function ProjectRequestClient() {
       const from = `${getDateKey(monthStart)}T00:00:00+09:00`;
       const to = `${getDateKey(new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + 1))}T00:00:00+09:00`;
 
-      const [{ data: projectData, error: projectError }, { data: clientData, error: clientError }] =
-        await Promise.all([
+      const [
+        { data: projectData, error: projectError },
+        { data: clientData, error: clientError },
+        { data: teamData, error: teamError },
+      ] = await Promise.all([
           supabase
             .from("project")
             .select(
-              "id,name,client_id,payment_due_date,planned_cost_approval_status,planned_cost_requested_at,planned_cost_reviewed_at,planned_cost_reviewed_by"
+              "id,name,client_id,payment_due_date,planned_cost_approval_status,planned_cost_requested_at,planned_cost_reviewed_at,planned_cost_reviewed_by,planned_cost_requested_by"
             )
             .in("planned_cost_approval_status", [
               PLANNED_COST_APPROVAL_STATUS.pending,
@@ -183,14 +219,29 @@ export default function ProjectRequestClient() {
             .lt("planned_cost_requested_at", to)
             .order("planned_cost_requested_at", { ascending: false }),
           supabase.from("client").select("id,name"),
+          supabase.from("team").select("id,parent_id"),
         ]);
 
       if (projectError) throw new Error(projectError.message);
       if (clientError) throw new Error(clientError.message);
+      if (teamError) throw new Error(teamError.message);
 
       const nextProjects = (projectData ?? []) as ProjectRow[];
       setProjects(nextProjects);
       setClients((clientData ?? []) as ClientRow[]);
+      setTeams((teamData ?? []) as TeamRow[]);
+
+      const requesterIds = Array.from(new Set(nextProjects.map((project) => project.planned_cost_requested_by).filter(Boolean))) as string[];
+      if (requesterIds.length > 0) {
+        const { data: requesterTeamData, error: requesterTeamError } = await supabase
+          .from("profile_team")
+          .select("profile_id,team_id")
+          .in("profile_id", requesterIds);
+        if (requesterTeamError) throw new Error(requesterTeamError.message);
+        setRequesterProfileTeams((requesterTeamData ?? []) as ProfileTeamRow[]);
+      } else {
+        setRequesterProfileTeams([]);
+      }
 
       const projectIds = nextProjects.map((project) => project.id);
       if (projectIds.length === 0) {
@@ -216,6 +267,53 @@ export default function ProjectRequestClient() {
     load();
   }, [load]);
 
+  const leaderEffectiveTeamIds = useMemo(() => {
+    const result = new Set(leaderTeamIds);
+    const childrenByParent = new Map<string | null, TeamRow[]>();
+
+    for (const team of teams) {
+      const parentId = team.parent_id ?? null;
+      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+      childrenByParent.get(parentId)!.push(team);
+    }
+
+    const walk = (teamId: string) => {
+      for (const child of childrenByParent.get(teamId) ?? []) {
+        if (result.has(child.id)) continue;
+        result.add(child.id);
+        walk(child.id);
+      }
+    };
+
+    for (const teamId of leaderTeamIds) {
+      walk(teamId);
+    }
+
+    return result;
+  }, [leaderTeamIds, teams]);
+
+  const leaderManagedRequesterIds = useMemo(() => {
+    const result = new Set<string>();
+    if (leaderEffectiveTeamIds.size === 0) return result;
+
+    for (const relation of requesterProfileTeams) {
+      if (leaderEffectiveTeamIds.has(relation.team_id)) {
+        result.add(relation.profile_id);
+      }
+    }
+
+    return result;
+  }, [leaderEffectiveTeamIds, requesterProfileTeams]);
+
+  const canReviewProject = useCallback(
+    (project: ProjectRow) => {
+      if (isAdmin) return true;
+      if (!project.planned_cost_requested_by) return false;
+      return leaderManagedRequesterIds.has(project.planned_cost_requested_by);
+    },
+    [isAdmin, leaderManagedRequesterIds]
+  );
+
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client.name])), [clients]);
 
   const rows = useMemo<RequestRow[]>(() => {
@@ -228,7 +326,7 @@ export default function ProjectRequestClient() {
       costMap.set(cost.project_id, current);
     }
 
-    return projects.map((project) => {
+    return projects.filter((project) => canReviewProject(project)).map((project) => {
       const cost = costMap.get(project.id) ?? { amount: 0, personDays: 0 };
       return {
         ...project,
@@ -237,45 +335,24 @@ export default function ProjectRequestClient() {
         plannedLaborPersonDays: cost.personDays,
       };
     });
-  }, [clientMap, plannedCosts, projects]);
+  }, [canReviewProject, clientMap, plannedCosts, projects]);
 
   const updateApprovalStatus = async (projectId: string, status: number) => {
-    if (!isAdmin || actionProjectId) return;
+    const targetProject = projects.find((project) => project.id === projectId);
+    if (!targetProject || !canReviewProject(targetProject) || actionProjectId) return;
 
     setActionProjectId(projectId);
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
-
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
-
-      const { error } = await supabase
-        .from("project")
-        .update({
-          planned_cost_approval_status: status,
-          planned_cost_reviewed_at: new Date().toISOString(),
-          planned_cost_reviewed_by: userId,
-          updated_by: userId,
-        })
-        .eq("id", projectId);
+      const { error } = await supabase.rpc("review_project_planned_cost", {
+        target_project_id: projectId,
+        target_approval_status: status,
+      });
 
       if (error) throw new Error(error.message);
 
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === projectId
-            ? {
-                ...project,
-                planned_cost_approval_status: status,
-                planned_cost_reviewed_at: new Date().toISOString(),
-                planned_cost_reviewed_by: userId,
-              }
-            : project
-        )
-      );
+      await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -334,10 +411,10 @@ export default function ProjectRequestClient() {
                     読み込み中...
                   </td>
                 </tr>
-              ) : !isAdmin ? (
+              ) : !isAdmin && !isTeamLeader ? (
                 <tr>
                   <td colSpan={8} className={styles.emptyCell}>
-                    管理者のみ利用できます。
+                    管理者または所属組織リーダーのみ利用できます。
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
@@ -348,7 +425,7 @@ export default function ProjectRequestClient() {
                 </tr>
               ) : (
                 rows.map((project) => {
-                  const disabled = actionProjectId === project.id;
+                  const disabled = actionProjectId === project.id || !canReviewProject(project);
                   return (
                     <tr key={project.id}>
                       <td>{formatDateTime(project.planned_cost_requested_at)}</td>

@@ -222,6 +222,81 @@
 
   .thHeadRight,
   .tdRight {
-    width: 180px;
+    width: 240px;
   }
+}
+
+.formHelpText {
+  margin: 0;
+  color: #555;
+  font-size: 13px;
+}
+
+.leaderList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fafafa;
+}
+
+.leaderItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.emptyText {
+  margin: 0;
+  color: #666;
+}
+
+@media (max-width: 640px) {
+  .leaderList {
+    grid-template-columns: 1fr;
+  }
+}
+
+.leaderPicker {
+  display: grid;
+  gap: 10px;
+}
+
+.selectedLeaderList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 36px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.selectedLeaderChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 10px 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.selectedLeaderRemoveButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  color: #666;
 }

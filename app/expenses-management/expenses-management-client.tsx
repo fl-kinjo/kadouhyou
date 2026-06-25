@@ -36,6 +36,16 @@ type ProfileJobRow = {
   job_id: string;
 };
 
+type TeamLeaderRow = {
+  team_id: string;
+  profile_id: string;
+};
+
+type ProfileTeamRow = {
+  profile_id: string;
+  team_id: string;
+};
+
 type JobRow = {
   id: string;
   name: string;
@@ -50,6 +60,7 @@ type TeamRow = {
   id: string;
   name: string;
   department_code: string | null;
+  parent_id: string | null;
 };
 
 type MainTab = "employee" | "request";
@@ -158,6 +169,8 @@ export default function ExpensesManagementClient() {
   const [savingGroupId, setSavingGroupId] = useState("");
   const [downloadingReceiptPath, setDownloadingReceiptPath] = useState("");
   const [message, setMessage] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
   const [activeMainTab, setActiveMainTab] = useState<MainTab>("employee");
   const [expenseTypeFilter, setExpenseTypeFilter] = useState<ExpenseTypeFilter>("all");
@@ -169,12 +182,51 @@ export default function ExpensesManagementClient() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [profileTeams, setProfileTeams] = useState<ProfileTeamRow[]>([]);
+  const [leaderTeamIds, setLeaderTeamIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
 
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw new Error(authError.message);
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("ログインユーザーを取得できません。");
+
+      const [
+        { data: currentProfileData, error: currentProfileError },
+        { data: teamLeaderData, error: teamLeaderError },
+      ] = await Promise.all([
+        supabase.from("profiles_2").select("id,is_admin").eq("id", userId).maybeSingle(),
+        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", userId),
+      ]);
+
+      if (currentProfileError) throw new Error(currentProfileError.message);
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
+
+      const nextIsAdmin = currentProfileData?.is_admin === 1;
+      const nextLeaderTeamIds = new Set(((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id));
+      const nextIsTeamLeader = nextLeaderTeamIds.size > 0;
+
+      setIsAdmin(nextIsAdmin);
+      setIsTeamLeader(nextIsTeamLeader);
+      setLeaderTeamIds(nextLeaderTeamIds);
+
+      if (!nextIsAdmin && !nextIsTeamLeader) {
+        setExpenseRows([]);
+        setProfiles([]);
+        setProfileJobs([]);
+        setJobs([]);
+        setProjects([]);
+        setTeams([]);
+        setProfileTeams([]);
+        setMessage("経費申請承認は管理者または所属組織リーダーのみ利用できます。");
+        return;
+      }
+
       const monthStart = getMonthStart(displayMonth);
       const monthEnd = getMonthEnd(displayMonth);
 
@@ -188,6 +240,7 @@ export default function ExpensesManagementClient() {
         { data: jobData, error: jobError },
         { data: projectData, error: projectError },
         { data: teamData, error: teamError },
+        { data: profileTeamData, error: profileTeamError },
       ] = await Promise.all([
         supabase
           .from("project_actual_cost")
@@ -206,7 +259,8 @@ export default function ExpensesManagementClient() {
         supabase.from("profile_job").select("profile_id,job_id"),
         supabase.from("job").select("id,name").order("created_at", { ascending: true }),
         supabase.from("project").select("id,name").order("created_at", { ascending: true }),
-        supabase.from("team").select("id,name,department_code").order("name", { ascending: true }),
+        supabase.from("team").select("id,name,department_code,parent_id").order("name", { ascending: true }),
+        supabase.from("profile_team").select("profile_id,team_id"),
       ]);
 
       if (expenseError) throw new Error(expenseError.message);
@@ -215,6 +269,7 @@ export default function ExpensesManagementClient() {
       if (jobError) throw new Error(jobError.message);
       if (projectError) throw new Error(projectError.message);
       if (teamError) throw new Error(teamError.message);
+      if (profileTeamError) throw new Error(profileTeamError.message);
 
       setExpenseRows((expenseData ?? []) as ExpenseRow[]);
       setProfiles((profileData ?? []) as ProfileRow[]);
@@ -222,6 +277,7 @@ export default function ExpensesManagementClient() {
       setJobs((jobData ?? []) as JobRow[]);
       setProjects((projectData ?? []) as ProjectRow[]);
       setTeams((teamData ?? []) as TeamRow[]);
+      setProfileTeams((profileTeamData ?? []) as ProfileTeamRow[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -233,13 +289,54 @@ export default function ExpensesManagementClient() {
     load();
   }, [load]);
 
+  const leaderEffectiveTeamIds = useMemo(() => {
+    const result = new Set(leaderTeamIds);
+    const walk = (parentId: string) => {
+      for (const team of teams) {
+        if (team.parent_id !== parentId || result.has(team.id)) continue;
+        result.add(team.id);
+        walk(team.id);
+      }
+    };
+
+    for (const teamId of leaderTeamIds) {
+      walk(teamId);
+    }
+
+    return result;
+  }, [leaderTeamIds, teams]);
+
+  const leaderManagedProfileIds = useMemo(() => {
+    const result = new Set<string>();
+    if (leaderEffectiveTeamIds.size === 0) return result;
+
+    for (const relation of profileTeams) {
+      if (leaderEffectiveTeamIds.has(relation.team_id)) {
+        result.add(relation.profile_id);
+      }
+    }
+
+    return result;
+  }, [leaderEffectiveTeamIds, profileTeams]);
+
+  const visibleProfiles = useMemo(() => {
+    if (isAdmin) return profiles;
+    return profiles.filter((profile) => leaderManagedProfileIds.has(profile.id));
+  }, [isAdmin, leaderManagedProfileIds, profiles]);
+
+
+  const visibleExpenseRows = useMemo(() => {
+    if (isAdmin) return expenseRows;
+    return expenseRows.filter((row) => leaderManagedProfileIds.has(row.profile_id));
+  }, [expenseRows, isAdmin, leaderManagedProfileIds]);
+
   const groupedRequests = useMemo<GroupedExpenseRequest[]>(() => {
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
     const projectMap = new Map(projects.map((project) => [project.id, project.name]));
     const teamMap = new Map(teams.map((team) => [team.id, team]));
     const map = new Map<string, GroupedExpenseRequest>();
 
-    for (const row of expenseRows) {
+    for (const row of visibleExpenseRows) {
       const current = map.get(row.request_group_id);
       const amount = Number(row.amount ?? 0);
       const invoice = row.invoice === true || row.invoice === 1;
@@ -304,7 +401,7 @@ export default function ExpensesManagementClient() {
 
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt, "ja"));
     return result;
-  }, [expenseRows, profiles, projects, teams]);
+  }, [profiles, projects, teams, visibleExpenseRows]);
 
   const employeeSummaries = useMemo<EmployeeSummaryRow[]>(() => {
     const jobMap = new Map(jobs.map((job) => [job.id, job.name]));
@@ -324,7 +421,7 @@ export default function ExpensesManagementClient() {
       groupMap.get(group.profileId)!.push(group);
     }
 
-    return profiles
+    return visibleProfiles
       .map((profile) => {
         const groups = groupMap.get(profile.id) ?? [];
         const totalAmount = groups.reduce((sum, group) => sum + group.totalAmount, 0);
@@ -349,7 +446,7 @@ export default function ExpensesManagementClient() {
       })
       .filter((row) => row.requestCount > 0)
       .sort((a, b) => a.name.localeCompare(b.name, "ja"));
-  }, [groupedRequests, jobs, profileJobs, profiles]);
+  }, [groupedRequests, jobs, profileJobs, visibleProfiles]);
 
   const selectedEmployeeSummary = useMemo(
     () => employeeSummaries.find((row) => row.profileId === selectedProfileId) ?? null,
@@ -371,19 +468,10 @@ export default function ExpensesManagementClient() {
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
-
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
-
-      const { error } = await supabase
-        .from("project_actual_cost")
-        .update({
-          application_status: applicationStatus,
-          updated_by: userId,
-        })
-        .eq("request_group_id", requestGroupId);
+      const { error } = await supabase.rpc("review_project_actual_cost_group", {
+        target_request_group_id: requestGroupId,
+        target_application_status: applicationStatus,
+      });
 
       if (error) throw new Error(error.message);
 
@@ -560,7 +648,11 @@ export default function ExpensesManagementClient() {
 
       {message && <p className={styles.message}>{message}</p>}
 
-      {activeMainTab === "employee" ? (
+      {!loading && !isAdmin && !isTeamLeader ? (
+        <section className={styles.employeeSection}>
+          <div className={styles.emptyState}>管理者または所属組織リーダーのみ利用できます。</div>
+        </section>
+      ) : activeMainTab === "employee" ? (
         <>
           {!selectedProfileId ? (
             <section className={styles.employeeSection}>

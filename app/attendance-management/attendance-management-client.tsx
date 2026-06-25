@@ -50,6 +50,21 @@ type JobRow = {
   name: string;
 };
 
+type TeamLeaderRow = {
+  team_id: string;
+  profile_id: string;
+};
+
+type ProfileTeamRow = {
+  profile_id: string;
+  team_id: string;
+};
+
+type TeamRow = {
+  id: string;
+  parent_id: string | null;
+};
+
 type AttendanceRow = {
   id: string;
   profile_id: string;
@@ -273,6 +288,8 @@ export default function AttendanceManagementClient() {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState("");
   const [message, setMessage] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
   const [activeMainTab, setActiveMainTab] = useState<MainTab>("employee");
   const [activeRequestSubTab, setActiveRequestSubTab] = useState<RequestSubTab>("leave");
@@ -285,6 +302,9 @@ export default function AttendanceManagementClient() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [profileJobs, setProfileJobs] = useState<ProfileJobRow[]>([]);
   const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [profileTeams, setProfileTeams] = useState<ProfileTeamRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [leaderTeamIds, setLeaderTeamIds] = useState<Set<string>>(new Set());
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([]);
   const [attendanceBreakRows, setAttendanceBreakRows] = useState<AttendanceBreakRow[]>([]);
   const [holidaySet, setHolidaySet] = useState<Set<string>>(new Set());
@@ -294,6 +314,47 @@ export default function AttendanceManagementClient() {
     setMessage("");
 
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw new Error(authError.message);
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("ログインユーザーを取得できません。");
+
+      const [
+        { data: currentProfileData, error: currentProfileError },
+        { data: teamLeaderData, error: teamLeaderError },
+      ] = await Promise.all([
+        supabase.from("profiles_2").select("id,is_admin").eq("id", userId).maybeSingle(),
+        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", userId),
+      ]);
+
+      if (currentProfileError) throw new Error(currentProfileError.message);
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
+
+      const nextIsAdmin = currentProfileData?.is_admin === 1;
+      const nextLeaderTeamIds = new Set(((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id));
+      const nextIsTeamLeader = nextLeaderTeamIds.size > 0;
+
+      setIsAdmin(nextIsAdmin);
+      setIsTeamLeader(nextIsTeamLeader);
+      setLeaderTeamIds(nextLeaderTeamIds);
+
+      if (!nextIsAdmin && !nextIsTeamLeader) {
+        setLeaveRequestListRows([]);
+        setLeaveSummaryRows([]);
+        setCorrectionRequestListRows([]);
+        setCorrectionSummaryRows([]);
+        setProfiles([]);
+        setProfileJobs([]);
+        setJobs([]);
+        setProfileTeams([]);
+        setTeams([]);
+        setAttendanceRows([]);
+        setAttendanceBreakRows([]);
+        setMessage("勤怠管理は管理者または所属組織リーダーのみ利用できます。");
+        return;
+      }
+
       const monthStart = getMonthStart(displayMonth);
       const monthEnd = getMonthEnd(displayMonth);
       const monthLastDate = getMonthLastDate(displayMonth);
@@ -311,6 +372,8 @@ export default function AttendanceManagementClient() {
         { data: profileData, error: profileError },
         { data: profileJobData, error: profileJobError },
         { data: jobData, error: jobError },
+        { data: profileTeamData, error: profileTeamError },
+        { data: teamData, error: teamError },
         { data: attendanceData, error: attendanceError },
         { data: attendanceBreakData, error: attendanceBreakError },
       ] = await Promise.all([
@@ -350,6 +413,8 @@ export default function AttendanceManagementClient() {
           .order("created_at", { ascending: true }),
         supabase.from("profile_job").select("profile_id,job_id"),
         supabase.from("job").select("id,name").order("created_at", { ascending: true }),
+        supabase.from("profile_team").select("profile_id,team_id"),
+        supabase.from("team").select("id,parent_id"),
         supabase
           .from("attendance")
           .select("id,profile_id,work_date,start_time,end_time")
@@ -372,6 +437,8 @@ export default function AttendanceManagementClient() {
       if (profileError) throw new Error(profileError.message);
       if (profileJobError) throw new Error(profileJobError.message);
       if (jobError) throw new Error(jobError.message);
+      if (profileTeamError) throw new Error(profileTeamError.message);
+      if (teamError) throw new Error(teamError.message);
       if (attendanceError) throw new Error(attendanceError.message);
       if (attendanceBreakError) throw new Error(attendanceBreakError.message);
 
@@ -382,6 +449,8 @@ export default function AttendanceManagementClient() {
       setProfiles((profileData ?? []) as ProfileRow[]);
       setProfileJobs((profileJobData ?? []) as ProfileJobRow[]);
       setJobs((jobData ?? []) as JobRow[]);
+      setProfileTeams((profileTeamData ?? []) as ProfileTeamRow[]);
+      setTeams((teamData ?? []) as TeamRow[]);
       setAttendanceRows((attendanceData ?? []) as AttendanceRow[]);
       setAttendanceBreakRows((attendanceBreakData ?? []) as AttendanceBreakRow[]);
       setHolidaySet(await fetchJapaneseHolidaySet());
@@ -401,19 +470,10 @@ export default function AttendanceManagementClient() {
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
-
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
-
-      const { error } = await supabase
-        .from("leave_request")
-        .update({
-          approval_status: approvalStatus,
-          updated_by: userId,
-        })
-        .eq("request_group_id", requestGroupId);
+      const { error } = await supabase.rpc("review_leave_request_group", {
+        target_request_group_id: requestGroupId,
+        target_approval_status: approvalStatus,
+      });
 
       if (error) throw new Error(error.message);
 
@@ -433,37 +493,12 @@ export default function AttendanceManagementClient() {
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
+      const { error } = await supabase.rpc("review_attendance_correction_request", {
+        target_request_id: request.id,
+        target_approval_status: approvalStatus,
+      });
 
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
-
-      if (approvalStatus === 1) {
-        const { error: attendanceError } = await supabase.from("attendance").upsert(
-          {
-            profile_id: request.profile_id,
-            work_date: request.work_date,
-            start_time: request.requested_start_time,
-            end_time: request.requested_end_time,
-            updated_by: userId,
-          },
-          { onConflict: "profile_id,work_date" }
-        );
-
-        if (attendanceError) throw new Error(attendanceError.message);
-      }
-
-      const { error: requestError } = await supabase
-        .from("attendance_correction_request")
-        .update({
-          approval_status: approvalStatus,
-          reviewed_by: userId,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", request.id);
-
-      if (requestError) throw new Error(requestError.message);
+      if (error) throw new Error(error.message);
 
       await load();
     } catch (error) {
@@ -473,11 +508,49 @@ export default function AttendanceManagementClient() {
     }
   };
 
+  const leaderEffectiveTeamIds = useMemo(() => {
+    const result = new Set(leaderTeamIds);
+    const walk = (parentId: string) => {
+      for (const team of teams) {
+        if (team.parent_id !== parentId || result.has(team.id)) continue;
+        result.add(team.id);
+        walk(team.id);
+      }
+    };
+
+    for (const teamId of leaderTeamIds) {
+      walk(teamId);
+    }
+
+    return result;
+  }, [leaderTeamIds, teams]);
+
+  const leaderManagedProfileIds = useMemo(() => {
+    const result = new Set<string>();
+    if (leaderEffectiveTeamIds.size === 0) return result;
+
+    for (const relation of profileTeams) {
+      if (leaderEffectiveTeamIds.has(relation.team_id)) {
+        result.add(relation.profile_id);
+      }
+    }
+
+    return result;
+  }, [leaderEffectiveTeamIds, profileTeams]);
+
+  const visibleProfiles = useMemo(() => {
+    if (isAdmin) return profiles;
+    return profiles.filter((profile) => leaderManagedProfileIds.has(profile.id));
+  }, [isAdmin, leaderManagedProfileIds, profiles]);
+
+  const visibleProfileIds = useMemo(() => new Set(visibleProfiles.map((profile) => profile.id)), [visibleProfiles]);
+
   const groupedLeaveRequests = useMemo<GroupedLeaveRequest[]>(() => {
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
     const map = new Map<string, GroupedLeaveRequest>();
 
     for (const row of leaveRequestListRows) {
+      if (!visibleProfileIds.has(row.profile_id)) continue;
       const current = map.get(row.request_group_id);
 
       if (!current) {
@@ -523,12 +596,13 @@ export default function AttendanceManagementClient() {
 
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt, "ja"));
     return result;
-  }, [leaveRequestListRows, profiles]);
+  }, [leaveRequestListRows, profiles, visibleProfileIds]);
 
   const correctionRequestCards = useMemo<CorrectionRequestCard[]>(() => {
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
 
     return correctionRequestListRows
+      .filter((row) => visibleProfileIds.has(row.profile_id))
       .map((row) => ({
         id: row.id,
         profileId: row.profile_id,
@@ -547,7 +621,7 @@ export default function AttendanceManagementClient() {
         approvalStatus: row.approval_status,
       }))
       .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt, "ja"));
-  }, [correctionRequestListRows, profiles]);
+  }, [correctionRequestListRows, profiles, visibleProfileIds]);
 
   const employeeSummaries = useMemo<EmployeeSummaryRow[]>(() => {
     const monthStart = getMonthStart(displayMonth);
@@ -591,7 +665,7 @@ export default function AttendanceManagementClient() {
       pendingCorrectionMap.set(row.profile_id, (pendingCorrectionMap.get(row.profile_id) ?? 0) + 1);
     }
 
-    return profiles
+    return visibleProfiles
       .map((profile) => {
         let workedMinutes = 0;
         let overtimeMinutes = 0;
@@ -656,7 +730,7 @@ export default function AttendanceManagementClient() {
     jobs,
     leaveSummaryRows,
     profileJobs,
-    profiles,
+    visibleProfiles,
   ]);
 
   return (
@@ -702,7 +776,11 @@ export default function AttendanceManagementClient() {
 
       {message && <p className={styles.message}>{message}</p>}
 
-      {activeMainTab === "employee" ? (
+      {!loading && !isAdmin && !isTeamLeader ? (
+        <section className={styles.employeeSection}>
+          <div className={styles.emptyState}>管理者または所属組織リーダーのみ利用できます。</div>
+        </section>
+      ) : activeMainTab === "employee" ? (
         <section className={styles.employeeSection}>
           {loading ? (
             <div className={styles.emptyState}>読み込み中...</div>

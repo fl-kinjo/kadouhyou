@@ -337,6 +337,7 @@ export default function PlannedCostSection({
       .update({
         planned_cost_approval_status: PLANNED_COST_APPROVAL_STATUS.pending,
         planned_cost_requested_at: new Date().toISOString(),
+        planned_cost_requested_by: updaterId,
         planned_cost_reviewed_at: null,
         planned_cost_reviewed_by: null,
         updated_by: updaterId,
