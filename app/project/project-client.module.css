@@ -225,3 +225,99 @@
   }
 }
 
+
+.controlPanel {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.sortLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #333;
+}
+
+.sortSelect {
+  min-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.statusFilterBox {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.statusFilterHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.statusFilterTitle {
+  font-weight: 800;
+}
+
+.filterMiniButton {
+  border: 1px solid #bbb;
+  border-radius: 999px;
+  background: #fff;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.statusCheckboxGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 12px;
+}
+
+.statusCheckboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.thSmall {
+  width: 72px;
+  border-bottom: 1px solid #eee;
+  padding: 12px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  background: #f8f8f8;
+  font-weight: 800;
+}
+
+.thWide {
+  min-width: 220px;
+  border-bottom: 1px solid #eee;
+  padding: 12px 10px;
+  text-align: left;
+  vertical-align: top;
+  background: #f8f8f8;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .sortLabel {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sortSelect {
+    width: 100%;
+  }
+}

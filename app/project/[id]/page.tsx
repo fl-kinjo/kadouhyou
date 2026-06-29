@@ -431,9 +431,14 @@ export default async function ProjectDetailPage(props: PageProps) {
   const actualExternal: number = sumNumbers(
     actualCostRows.filter((row) => row.category === 1).map((row) => row.amount)
   );
+  const actualLaborFromCostRows: number = sumNumbers(
+    actualCostRows.filter((row) => row.category === 2).map((row) => row.amount)
+  );
   const totalReportHours: number = sumNumbers(reportRows.map((row) => row.hours));
   const actualPersonDays: number = totalReportHours / HOURS_PER_PERSON_DAY;
-  const actualLabor: number = actualPersonDays * LABOR_COST_PER_PERSON_DAY;
+  const actualLaborFromReports: number = actualPersonDays * LABOR_COST_PER_PERSON_DAY;
+  const actualLabor: number =
+    actualLaborFromCostRows > 0 ? actualLaborFromCostRows : actualLaborFromReports;
   const actualTotal: number = actualLabor + actualExpense + actualExternal;
 
   const invoiceAmount: number = toSafeNumber(projectRow.invoice_amount);
