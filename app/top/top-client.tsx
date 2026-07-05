@@ -41,6 +41,7 @@ type Project = {
   project_manager_id: string | null;
   planned_cost_approval_status: number | null;
   planned_cost_requested_by: string | null;
+  planned_cost_reviewed_at: string | null;
 };
 
 type ProjectMember = {
@@ -353,6 +354,10 @@ export default function TopClient() {
     pendingPlannedCostApprovalProjects,
     setPendingPlannedCostApprovalProjects,
   ] = useState<Project[]>([]);
+  const [
+    decisionPlannedCostApprovalProjects,
+    setDecisionPlannedCostApprovalProjects,
+  ] = useState<Project[]>([]);
   const [projectPlannedCosts, setProjectPlannedCosts] = useState<
     ProjectPlannedCostRow[]
   >([]);
@@ -505,6 +510,7 @@ export default function TopClient() {
         { data: decisionCorrectionData, error: decisionCorrectionError },
         { data: pendingExpenseData, error: pendingExpenseError },
         { data: decisionExpenseData, error: decisionExpenseError },
+        { data: decisionPlannedCostData, error: decisionPlannedCostError },
         holidayData,
       ] = await Promise.all([
         supabase
@@ -529,7 +535,7 @@ export default function TopClient() {
         supabase
           .from("project")
           .select(
-            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status,planned_cost_requested_by",
+            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status,planned_cost_requested_by,planned_cost_reviewed_at",
           )
           .order("updated_at", { ascending: false }),
         supabase.from("project_member").select("project_id,profile_id"),
@@ -603,6 +609,16 @@ export default function TopClient() {
           .in("application_status", [1, 2])
           .not("reviewed_at", "is", null)
           .gte("reviewed_at", decisionSince),
+        supabase
+          .from("project")
+          .select(
+            "id,name,client_id,status,invoice_amount,invoice_month,payment_due_date,invoice,project_manager_id,planned_cost_approval_status,planned_cost_requested_by,planned_cost_reviewed_at",
+          )
+          .eq("planned_cost_requested_by", userId)
+          .in("planned_cost_approval_status", [2, 3])
+          .not("planned_cost_reviewed_at", "is", null)
+          .gte("planned_cost_reviewed_at", decisionSince)
+          .order("planned_cost_reviewed_at", { ascending: false }),
         fetchJapaneseHolidaySetSafe(),
       ]);
 
@@ -623,6 +639,8 @@ export default function TopClient() {
         throw new Error(decisionCorrectionError.message);
       if (pendingExpenseError) throw new Error(pendingExpenseError.message);
       if (decisionExpenseError) throw new Error(decisionExpenseError.message);
+      if (decisionPlannedCostError)
+        throw new Error(decisionPlannedCostError.message);
 
       const todayAttendance = (attendanceData ?? null) as Attendance | null;
       const monthAttendance = (attendanceMonthData ?? []) as Attendance[];
@@ -703,6 +721,9 @@ export default function TopClient() {
             project.planned_cost_approval_status === 1 &&
             canReviewProfile(project.planned_cost_requested_by),
         ),
+      );
+      setDecisionPlannedCostApprovalProjects(
+        (decisionPlannedCostData ?? []) as Project[],
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -1306,6 +1327,40 @@ export default function TopClient() {
       });
     }
 
+    if (
+      canViewProject &&
+      decisionPlannedCostApprovalProjects.length > 0
+    ) {
+      const approvedPlannedCostProjectsForNotice =
+        decisionPlannedCostApprovalProjects.filter(
+          (project) => project.planned_cost_approval_status === 2,
+        );
+      const rejectedPlannedCostProjectsForNotice =
+        decisionPlannedCostApprovalProjects.filter(
+          (project) => project.planned_cost_approval_status === 3,
+        );
+
+      requestItems.push({
+        title: `予定工数確認依頼の承認/否認通知が${decisionPlannedCostApprovalProjects.length}件あります`,
+        description: `承認 ${approvedPlannedCostProjectsForNotice.length}件 / 否認 ${rejectedPlannedCostProjectsForNotice.length}件`,
+        sources: decisionPlannedCostApprovalProjects.map((project) => ({
+          id: `decision-planned-cost-${project.id}`,
+          title: project.name,
+          description: [
+            project.planned_cost_approval_status === 2 ? "承認済み" : "否認",
+            project.status != null
+              ? `状態: ${STATUS_LABELS[project.status] ?? String(project.status)}`
+              : null,
+            `請求月: ${formatMonth(project.invoice_month)}`,
+            `請求額: ${formatCurrency(project.invoice_amount)}`,
+          ]
+            .filter(Boolean)
+            .join(" / "),
+          href: `/project/${project.id}`,
+        })),
+      });
+    }
+
     const groups: AlertGroup[] = [
       { key: "project", title: "案件", items: projectItems },
       { key: "work", title: "勤怠・業務報告", items: workItems },
@@ -1320,6 +1375,7 @@ export default function TopClient() {
     decisionCorrectionRows,
     decisionExpenseRows,
     decisionLeaveRows,
+    decisionPlannedCostApprovalProjects,
     holidaySet,
     pendingCorrectionRows,
     pendingExpenseRows,
