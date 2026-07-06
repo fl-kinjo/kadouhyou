@@ -1,0 +1,150 @@
+.page {
+  padding: 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.kicker {
+  margin: 0 0 4px;
+  color: #666;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #bbb;
+  border-radius: 999px;
+  background: #fff;
+  color: #222;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.backButton:hover {
+  background: #f3f3f3;
+}
+
+.monthRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.monthButton {
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+}
+
+.monthTitle {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.emptyState {
+  padding: 28px 20px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fff;
+  color: #666;
+}
+
+.summaryCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.summaryCard {
+  border-radius: 10px;
+  background: #f3f3f3;
+  padding: 16px;
+}
+
+.summaryLabel {
+  font-size: 13px;
+  color: #444;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.summaryValue {
+  font-size: 20px;
+  font-weight: 900;
+  color: #111;
+}
+
+.tableFrame {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: auto;
+  background: #fff;
+}
+
+.summaryTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 880px;
+}
+
+.summaryTable th {
+  background: #d8d8d8;
+  padding: 10px 12px;
+  border-bottom: 1px solid #d0d0d0;
+  text-align: left;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.summaryTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ededed;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.summaryTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 900px) {
+  .pageHeader {
+    display: grid;
+  }
+
+  .summaryCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

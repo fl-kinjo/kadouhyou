@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/app/utils/supabase/client";
 import styles from "./expenses-management-client.module.css";
@@ -463,6 +464,14 @@ export default function ExpensesManagementClient() {
     );
   }, [expenseTypeFilter, groupedRequests]);
 
+  const teamSummaryHref = useMemo(() => {
+    const params = new URLSearchParams({
+      year: String(displayMonth.getFullYear()),
+      month: String(displayMonth.getMonth() + 1),
+    });
+    return `/expenses-management/team-summary?${params.toString()}`;
+  }, [displayMonth]);
+
   const updateApplicationStatus = async (requestGroupId: string, applicationStatus: 1 | 2 | 3) => {
     setSavingGroupId(requestGroupId);
     setMessage("");
@@ -627,6 +636,9 @@ export default function ExpensesManagementClient() {
         >
           ›
         </button>
+        <Link href={teamSummaryHref} className={styles.teamSummaryButton}>
+          部門ごとの経費総額確認
+        </Link>
       </div>
 
       <div className={styles.tabBar}>

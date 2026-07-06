@@ -7,6 +7,7 @@ import styles from "./report-client.module.css";
 
 type ProjectOption = {
   id: string;
+  project_no: number | string | null;
   name: string;
   client_name: string;
 };
@@ -18,6 +19,7 @@ type ReportEntry = {
   project_id: string;
   project?: {
     id: string;
+    project_no?: number | string | null;
     name: string | null;
     client?: {
       name: string | null;
@@ -27,6 +29,10 @@ type ReportEntry = {
 
 type Profile = {
   id: string;
+};
+
+type ReportSubmission = {
+  submitted_at: string | null;
 };
 
 function addDaysISO(dateISO: string, delta: number) {
@@ -69,6 +75,18 @@ function formatHours(value: number | string) {
   return `${hours}時間${minutes}分`;
 }
 
+function formatSubmittedAt(value: string | null) {
+  if (!value) return "";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "";
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mm = String(dt.getMinutes()).padStart(2, "0");
+  return `${y}/${m}/${d} ${hh}:${mm}`;
+}
+
 function sumHours(entries: ReportEntry[]) {
   const total = entries.reduce((acc, entry) => acc + (Number(entry.hours) || 0), 0);
   return formatHours(total);
@@ -77,6 +95,7 @@ function sumHours(entries: ReportEntry[]) {
 function normalizeProjectRows(rows: any[]): ProjectOption[] {
   return rows.map((row) => ({
     id: row.id,
+    project_no: row.project_no ?? null,
     name: row.name ?? "",
     client_name: row.client?.name ?? "",
   }));
@@ -88,6 +107,12 @@ function uniqueProjects(projects: ProjectOption[]) {
   return Array.from(map.values());
 }
 
+function getProjectOptionLabel(project: ProjectOption) {
+  const no = project.project_no ? `${project.project_no} / ` : "";
+  const client = project.client_name ? `${project.client_name} / ` : "";
+  return `${no}${client}${project.name}`;
+}
+
 export default function ReportClient({ initialDate }: { initialDate: string }) {
   const supabase = createClient();
   const router = useRouter();
@@ -95,8 +120,10 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
   const [date, setDate] = useState(initialDate);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
 
   const [entries, setEntries] = useState<ReportEntry[]>([]);
   const [myProjects, setMyProjects] = useState<ProjectOption[]>([]);
@@ -111,6 +138,7 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
   const [formMinutes, setFormMinutes] = useState("0");
 
   const editEntry = useMemo(() => entries.find((entry) => entry.id === editingId) ?? null, [entries, editingId]);
+  const isSubmitted = Boolean(submittedAt);
 
   useEffect(() => {
     setDate(initialDate);
@@ -132,6 +160,7 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
         project_id,
         project:project_id (
           id,
+          project_no,
           name,
           client:client_id ( name )
         )
@@ -144,28 +173,50 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
     setEntries(((data ?? []) as any) as ReportEntry[]);
   };
 
+  const loadSubmission = async (currentProfileId: string, currentDate: string) => {
+    const { data, error } = await supabase
+      .from("report_submission")
+      .select("submitted_at")
+      .eq("profile_id", currentProfileId)
+      .eq("work_date", currentDate)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    setSubmittedAt(((data ?? null) as ReportSubmission | null)?.submitted_at ?? null);
+  };
+
   const loadMyProjects = async (currentProfileId: string) => {
-    const { data: relations, error: relationError } = await supabase
-      .from("project_member")
-      .select("project_id")
-      .eq("profile_id", currentProfileId);
+    const [relationResult, managerResult] = await Promise.all([
+      supabase.from("project_member").select("project_id").eq("profile_id", currentProfileId),
+      supabase
+        .from("project")
+        .select(`id,project_no,name,client:client_id(name)`)
+        .eq("project_manager_id", currentProfileId)
+        .order("created_at", { ascending: true })
+        .limit(1000),
+    ]);
 
-    if (relationError) throw new Error(relationError.message);
+    if (relationResult.error) throw new Error(relationResult.error.message);
+    if (managerResult.error) throw new Error(managerResult.error.message);
 
-    const projectIds = Array.from(new Set((relations ?? []).map((item: any) => item.project_id).filter(Boolean)));
-    if (projectIds.length === 0) {
-      setMyProjects([]);
-      return;
+    const memberProjectIds = Array.from(
+      new Set((relationResult.data ?? []).map((item: any) => item.project_id).filter(Boolean)),
+    );
+
+    let memberProjects: ProjectOption[] = [];
+    if (memberProjectIds.length > 0) {
+      const { data: projects, error: projectError } = await supabase
+        .from("project")
+        .select(`id,project_no,name,client:client_id(name)`)
+        .in("id", memberProjectIds)
+        .order("created_at", { ascending: true });
+
+      if (projectError) throw new Error(projectError.message);
+      memberProjects = normalizeProjectRows((projects ?? []) as any[]);
     }
 
-    const { data: projects, error: projectError } = await supabase
-      .from("project")
-      .select(`id,name,client:client_id(name)`)
-      .in("id", projectIds)
-      .order("created_at", { ascending: true });
-
-    if (projectError) throw new Error(projectError.message);
-    setMyProjects(normalizeProjectRows((projects ?? []) as any[]));
+    const managerProjects = normalizeProjectRows((managerResult.data ?? []) as any[]);
+    setMyProjects(uniqueProjects([...memberProjects, ...managerProjects]));
   };
 
   const load = async () => {
@@ -191,7 +242,11 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
       const currentProfileId = (profile as Profile).id;
       setProfileId(currentProfileId);
 
-      await Promise.all([loadEntries(currentProfileId, date), loadMyProjects(currentProfileId)]);
+      await Promise.all([
+        loadEntries(currentProfileId, date),
+        loadMyProjects(currentProfileId),
+        loadSubmission(currentProfileId, date),
+      ]);
     } catch (error) {
       setMsg(error instanceof Error ? error.message : String(error));
     } finally {
@@ -214,12 +269,21 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
 
       setSearchingProject(true);
       try {
-        const { data, error } = await supabase
+        const numericText = /^\d+$/.test(text) ? Number(text) : null;
+        let query = supabase
           .from("project")
-          .select(`id,name,client:client_id(name)`)
-          .ilike("name", `%${text}%`)
+          .select(`id,project_no,name,client:client_id(name)`)
           .order("created_at", { ascending: false })
           .limit(20);
+
+        if (numericText != null) {
+          const escapedText = text.replace(/[%_]/g, "\\$&");
+          query = query.or(`name.ilike.%${escapedText}%,project_no.eq.${numericText}`);
+        } else {
+          query = query.ilike("name", `%${text}%`);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw new Error(error.message);
         setSearchedProjects(normalizeProjectRows((data ?? []) as any[]));
@@ -238,7 +302,25 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
     return uniqueProjects(base);
   }, [myProjects, projectSearch, searchedProjects]);
 
+  const clearSubmissionIfNeeded = async (currentProfileId: string) => {
+    if (!submittedAt) return;
+
+    const { error } = await supabase
+      .from("report_submission")
+      .delete()
+      .eq("profile_id", currentProfileId)
+      .eq("work_date", date);
+
+    if (error) throw new Error(error.message);
+    setSubmittedAt(null);
+  };
+
   const openAddModal = () => {
+    if (isSubmitted) {
+      setMsg("提出済みのため業務は追加できません。");
+      return;
+    }
+
     setEditingId(null);
     setProjectSearch("");
     setFormProjectId(myProjects[0]?.id ?? "");
@@ -248,6 +330,11 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
   };
 
   const openEditModal = (id: string) => {
+    if (isSubmitted) {
+      setMsg("提出済みのため業務は編集できません。");
+      return;
+    }
+
     const entry = entries.find((item) => item.id === id);
     if (!entry) return;
 
@@ -277,6 +364,12 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
 
   const saveEntry = async () => {
     setMsg("");
+
+    if (isSubmitted) {
+      setMsg("提出済みのため業務は追加・編集できません。");
+      return;
+    }
+
     const validationError = validate();
     if (validationError) {
       setMsg(validationError);
@@ -321,8 +414,10 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
         if (error) throw new Error(error.message);
       }
 
+      await clearSubmissionIfNeeded(profileId);
       closeModal();
       await loadEntries(profileId, date);
+      setMsg(editingId ? "業務報告を更新しました。内容を確認して再度提出してください。" : "業務報告を追加しました。追加が完了したら提出してください。");
     } catch (error) {
       setMsg(error instanceof Error ? error.message : String(error));
     } finally {
@@ -331,15 +426,67 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
   };
 
   const deleteEntry = async (id: string) => {
+    if (isSubmitted) {
+      setMsg("提出済みのため業務は削除できません。");
+      return;
+    }
+
     if (!confirm("この行を削除しますか？")) return;
+    if (!profileId) {
+      setMsg("プロフィールが取得できません。再読み込みしてください。");
+      return;
+    }
 
     setMsg("");
     try {
       const { error } = await supabase.from("report").delete().eq("id", id);
       if (error) throw new Error(error.message);
+      await clearSubmissionIfNeeded(profileId);
       setEntries((current) => current.filter((item) => item.id !== id));
+      setMsg("業務報告を削除しました。内容を確認して再度提出してください。");
     } catch (error) {
       setMsg(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const submitReport = async () => {
+    setMsg("");
+
+    if (!profileId) {
+      setMsg("プロフィールが取得できません。再読み込みしてください。");
+      return;
+    }
+
+    if (entries.length === 0) {
+      setMsg("業務を1件以上追加してから提出してください。");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("report_submission")
+        .upsert(
+          {
+            profile_id: profileId,
+            work_date: date,
+            submitted_at: now,
+            submitted_by: profileId,
+            updated_at: now,
+          },
+          { onConflict: "profile_id,work_date" },
+        )
+        .select("submitted_at")
+        .single();
+
+      if (error) throw new Error(error.message);
+      setSubmittedAt(((data ?? null) as ReportSubmission | null)?.submitted_at ?? now);
+      setMsg("業務報告を提出しました。");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -364,8 +511,18 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
         </div>
 
         <div className={styles.headerButtons}>
-          <button type="button" onClick={openAddModal} className={styles.btnRed} disabled={saving}>
-            ＋ 業務を追加
+          {!isSubmitted ? (
+            <button type="button" onClick={openAddModal} className={styles.btnRed} disabled={saving || submitting}>
+              ＋ 業務を追加
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={submitReport}
+            className={styles.btnSubmit}
+            disabled={loading || saving || submitting || entries.length === 0 || isSubmitted}
+          >
+            {submitting ? "提出中..." : isSubmitted ? "提出済み" : "報告を提出する"}
           </button>
         </div>
       </div>
@@ -374,6 +531,13 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
 
       <div className={styles.contentRow}>
         <div className={styles.tableArea}>
+          <div className={styles.submissionBox}>
+            <span className={isSubmitted ? styles.submittedBadge : styles.unsubmittedBadge}>{isSubmitted ? "提出済み" : "未提出"}</span>
+            {isSubmitted ? <span className={styles.submissionText}>提出日時：{formatSubmittedAt(submittedAt)}</span> : null}
+            {isSubmitted ? <span className={styles.submissionText}>提出済みのため、業務の追加・編集・削除はできません。</span> : null}
+            {!isSubmitted ? <span className={styles.submissionText}>業務を追加し終わったら「報告を提出する」を押してください。</span> : null}
+          </div>
+
           <div className={styles.tableScroll}>
             <table className={styles.table}>
               <thead>
@@ -403,17 +567,24 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
                     <tr key={entry.id}>
                       <td className={styles.tdNo}>{index + 1}</td>
                       <td className={styles.td}>{entry.project?.client?.name ?? ""}</td>
-                      <td className={styles.td}>{entry.project?.name ?? ""}</td>
+                      <td className={styles.td}>
+                        {entry.project?.project_no ? `${entry.project.project_no} / ` : ""}
+                        {entry.project?.name ?? ""}
+                      </td>
                       <td className={styles.tdTime}>{formatHours(entry.hours)}</td>
                       <td className={styles.tdActions}>
-                        <div className={styles.actionButtons}>
-                          <button type="button" onClick={() => openEditModal(entry.id)} className={styles.btnSmall}>
-                            編集
-                          </button>
-                          <button type="button" onClick={() => deleteEntry(entry.id)} className={styles.btnSmall}>
-                            削除
-                          </button>
-                        </div>
+                        {isSubmitted ? (
+                          <span className={styles.lockedText}>提出済み</span>
+                        ) : (
+                          <div className={styles.actionButtons}>
+                            <button type="button" onClick={() => openEditModal(entry.id)} className={styles.btnSmall}>
+                              編集
+                            </button>
+                            <button type="button" onClick={() => deleteEntry(entry.id)} className={styles.btnSmall}>
+                              削除
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -452,10 +623,10 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
                     value={projectSearch}
                     onChange={(event) => setProjectSearch(event.target.value)}
                     className={styles.input}
-                    placeholder="案件名で検索"
+                    placeholder="案件名・案件NOで検索"
                   />
                   <p className={styles.formHelpText}>
-                    初期表示は自分に紐づく案件です。検索すると他の案件も選択肢に追加されます。
+                    初期表示は自分に紐づく案件と自分がPMの案件です。検索すると他の案件も選択肢に追加されます。
                     {searchingProject ? " 検索中..." : ""}
                   </p>
                 </div>
@@ -467,7 +638,7 @@ export default function ReportClient({ initialDate }: { initialDate: string }) {
                   <option value="">選択してください</option>
                   {selectableProjects.map((project) => (
                     <option key={project.id} value={project.id}>
-                      {project.client_name} / {project.name}
+                      {getProjectOptionLabel(project)}
                     </option>
                   ))}
                 </select>

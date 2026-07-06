@@ -280,3 +280,65 @@
   color: #b00;
   text-align: center;
 }
+
+.btnSubmit {
+  border: 1px solid #b00;
+  background: #fff;
+  color: #b00;
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.btnSubmit:disabled {
+  border-color: #ccc;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.submissionBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.submittedBadge,
+.unsubmittedBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.submittedBadge {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+
+.unsubmittedBadge {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.submissionText {
+  color: #555;
+  font-size: 13px;
+}
+
+
+.lockedText {
+  color: #777;
+  font-size: 13px;
+  font-weight: 700;
+}

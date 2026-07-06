@@ -92,9 +92,9 @@ type ProjectPlannedCostRow = {
   amount: number | null;
 };
 
-type ReportRow = {
+type ReportSubmissionRow = {
   work_date: string;
-  hours: number | string;
+  submitted_at: string;
 };
 
 type LeaveRequestRow = {
@@ -361,7 +361,9 @@ export default function TopClient() {
   const [projectPlannedCosts, setProjectPlannedCosts] = useState<
     ProjectPlannedCostRow[]
   >([]);
-  const [reportRows, setReportRows] = useState<ReportRow[]>([]);
+  const [reportSubmissionRows, setReportSubmissionRows] = useState<
+    ReportSubmissionRow[]
+  >([]);
   const [approvedLeaveRows, setApprovedLeaveRows] = useState<LeaveRequestRow[]>(
     [],
   );
@@ -502,7 +504,7 @@ export default function TopClient() {
         { data: projectMembersData, error: projectMembersError },
         { data: clientsData, error: clientsError },
         { data: plannedCostsData, error: plannedCostsError },
-        { data: reportData, error: reportError },
+        { data: reportSubmissionData, error: reportSubmissionError },
         { data: approvedLeaveData, error: approvedLeaveError },
         { data: pendingLeaveData, error: pendingLeaveError },
         { data: decisionLeaveData, error: decisionLeaveError },
@@ -544,8 +546,8 @@ export default function TopClient() {
           .from("project_planned_cost")
           .select("project_id,operating_person_months,amount"),
         supabase
-          .from("report")
-          .select("work_date,hours")
+          .from("report_submission")
+          .select("work_date,submitted_at")
           .eq("profile_id", userId)
           .gte("work_date", prevWeekStartKey)
           .lte("work_date", prevWeekEndKey),
@@ -629,7 +631,7 @@ export default function TopClient() {
       if (projectMembersError) throw new Error(projectMembersError.message);
       if (clientsError) throw new Error(clientsError.message);
       if (plannedCostsError) throw new Error(plannedCostsError.message);
-      if (reportError) throw new Error(reportError.message);
+      if (reportSubmissionError) throw new Error(reportSubmissionError.message);
       if (approvedLeaveError) throw new Error(approvedLeaveError.message);
       if (pendingLeaveError) throw new Error(pendingLeaveError.message);
       if (decisionLeaveError) throw new Error(decisionLeaveError.message);
@@ -657,7 +659,9 @@ export default function TopClient() {
       setProjectPlannedCosts(
         (plannedCostsData ?? []) as ProjectPlannedCostRow[],
       );
-      setReportRows((reportData ?? []) as ReportRow[]);
+      setReportSubmissionRows(
+        (reportSubmissionData ?? []) as ReportSubmissionRow[],
+      );
       setApprovedLeaveRows((approvedLeaveData ?? []) as LeaveRequestRow[]);
       const rawPendingLeaveRows = (pendingLeaveData ?? []) as LeaveRequestRow[];
       const rawPendingCorrectionRows = (pendingCorrectionData ?? []) as AttendanceCorrectionRequestRow[];
@@ -940,13 +944,9 @@ export default function TopClient() {
       approvedLeaveRows.map((row) => [row.work_date, row]),
     );
 
-    const reportHoursByDate = new Map<string, number>();
-    for (const row of reportRows) {
-      reportHoursByDate.set(
-        row.work_date,
-        (reportHoursByDate.get(row.work_date) ?? 0) + toNumber(row.hours),
-      );
-    }
+    const submittedReportDateSet = new Set(
+      reportSubmissionRows.map((row) => row.work_date),
+    );
 
     const projectItems: AlertItem[] = [];
     const workItems: AlertItem[] = [];
@@ -1079,7 +1079,7 @@ export default function TopClient() {
           !isBusinessDay(reportCursor, holidaySet) ||
           isFullDayLeave(leave?.leave_type);
 
-        if (!shouldSkip && (reportHoursByDate.get(dateKey) ?? 0) <= 0) {
+        if (!shouldSkip && !submittedReportDateSet.has(dateKey)) {
           missingReportDates.push(dateKey);
         }
 
@@ -1088,12 +1088,12 @@ export default function TopClient() {
 
       if (missingReportDates.length > 0) {
         workItems.push({
-          title: `先週分の業務報告未入力が${missingReportDates.length}日あります`,
+          title: `先週分の業務報告未提出が${missingReportDates.length}日あります`,
           description: formatDateArraySummary(missingReportDates),
           sources: missingReportDates.map((dateKey) => ({
             id: `missing-report-${dateKey}`,
             title: formatDateSlash(dateKey),
-            description: "業務報告未入力",
+            description: "業務報告未提出",
             href: `/report?date=${dateKey}`,
           })),
         });
@@ -1385,7 +1385,7 @@ export default function TopClient() {
     isTeamLeader,
     menuPermissionMap,
     projectPlannedCosts,
-    reportRows,
+    reportSubmissionRows,
   ]);
 
   const totalAlertCount = useMemo(

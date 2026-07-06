@@ -7,6 +7,7 @@ import styles from "./expenses-client.module.css";
 type ProjectRow = {
   id: string;
   name: string;
+  project_no: number | string | null;
 };
 
 type TeamRow = {
@@ -117,12 +118,22 @@ function createEmptyDetail(): DetailFormRow {
   };
 }
 
+function formatProjectLabel(project: ProjectRow | null) {
+  if (!project) return "-";
+  const projectNo = project.project_no == null || project.project_no === "" ? "" : `${project.project_no} / `;
+  return `${projectNo}${project.name}`;
+}
+
 function formatTeamLabel(team: TeamRow | null) {
   if (!team) return "-";
-  if (team.department_code) {
-    return `${team.department_code} / ${team.name}`;
-  }
   return team.name;
+}
+
+function mergeProjects(current: ProjectRow[], next: ProjectRow[]) {
+  const map = new Map<string, ProjectRow>();
+  current.forEach((project) => map.set(project.id, project));
+  next.forEach((project) => map.set(project.id, project));
+  return Array.from(map.values());
 }
 
 function sanitizeFileName(fileName: string) {
@@ -140,6 +151,9 @@ export default function ExpensesClient() {
   const [expenseType, setExpenseType] = useState<ExpenseType>("direct");
 
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [projectSearchResults, setProjectSearchResults] = useState<ProjectRow[]>([]);
+  const [projectSearchKeyword, setProjectSearchKeyword] = useState("");
+  const [projectSearchLoading, setProjectSearchLoading] = useState(false);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
 
@@ -158,30 +172,60 @@ export default function ExpensesClient() {
       const userId = authData.user?.id;
       if (!userId) throw new Error("ログインユーザーを取得できません。");
 
-      const [
-        { data: projectData, error: projectError },
-        { data: teamData, error: teamError },
-        { data: expenseData, error: expenseError },
-      ] = await Promise.all([
-        supabase.from("project").select("id,name").order("name", { ascending: true }),
-        supabase.from("team").select("id,name,department_code").order("name", { ascending: true }),
-        supabase
-          .from("project_actual_cost")
-          .select(
-            "id,project_id,team_id,expense_type,expense_name,target_year_month,amount,expense_date,invoice,purpose,updated_at,updated_by,profile_id,category,application_status,request_group_id,receipt_file_path,receipt_file_name,receipt_mime_type,receipt_size_bytes"
-          )
-          .eq("profile_id", userId)
-          .order("expense_date", { ascending: false })
-          .order("updated_at", { ascending: false }),
-      ]);
+      const { data: profileTeamData, error: profileTeamError } = await supabase
+        .from("profile_team")
+        .select("team_id")
+        .eq("profile_id", userId);
 
-      if (projectError) throw new Error(projectError.message);
+      if (profileTeamError) throw new Error(profileTeamError.message);
+
+      const teamIds = Array.from(
+        new Set((profileTeamData ?? []).map((row) => row.team_id).filter(Boolean) as string[])
+      );
+
+      const teamPromise = teamIds.length > 0
+        ? supabase
+            .from("team")
+            .select("id,name,department_code")
+            .in("id", teamIds)
+            .order("name", { ascending: true })
+        : Promise.resolve({ data: [], error: null });
+
+      const [{ data: teamData, error: teamError }, { data: expenseData, error: expenseError }] =
+        await Promise.all([
+          teamPromise,
+          supabase
+            .from("project_actual_cost")
+            .select(
+              "id,project_id,team_id,expense_type,expense_name,target_year_month,amount,expense_date,invoice,purpose,updated_at,updated_by,profile_id,category,application_status,request_group_id,receipt_file_path,receipt_file_name,receipt_mime_type,receipt_size_bytes"
+            )
+            .eq("profile_id", userId)
+            .order("expense_date", { ascending: false })
+            .order("updated_at", { ascending: false }),
+        ]);
+
       if (teamError) throw new Error(teamError.message);
       if (expenseError) throw new Error(expenseError.message);
 
-      setProjects((projectData ?? []) as ProjectRow[]);
+      const nextExpenses = (expenseData ?? []) as ExpenseRow[];
+      const projectIds = Array.from(
+        new Set(nextExpenses.map((expense) => expense.project_id).filter(Boolean) as string[])
+      );
+
+      let expenseProjectRows: ProjectRow[] = [];
+      if (projectIds.length > 0) {
+        const { data: expenseProjectData, error: expenseProjectError } = await supabase
+          .from("project")
+          .select("id,name,project_no")
+          .in("id", projectIds);
+
+        if (expenseProjectError) throw new Error(expenseProjectError.message);
+        expenseProjectRows = (expenseProjectData ?? []) as ProjectRow[];
+      }
+
+      setProjects((current) => mergeProjects(current, expenseProjectRows));
       setTeams((teamData ?? []) as TeamRow[]);
-      setExpenses((expenseData ?? []) as ExpenseRow[]);
+      setExpenses(nextExpenses);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -189,12 +233,70 @@ export default function ExpensesClient() {
     }
   }, [supabase]);
 
+  const searchProjects = useCallback(
+    async (keyword: string) => {
+      setProjectSearchLoading(true);
+
+      try {
+        const normalizedKeyword = keyword.trim();
+        const baseQuery = supabase
+          .from("project")
+          .select("id,name,project_no")
+          .order("project_no", { ascending: false })
+          .limit(20);
+
+        const queries = [
+          normalizedKeyword
+            ? baseQuery.ilike("name", `%${normalizedKeyword}%`)
+            : baseQuery,
+        ];
+
+        const projectNo = Number(normalizedKeyword);
+        if (normalizedKeyword && Number.isInteger(projectNo)) {
+          queries.push(
+            supabase
+              .from("project")
+              .select("id,name,project_no")
+              .eq("project_no", projectNo)
+              .limit(20)
+          );
+        }
+
+        const results = await Promise.all(queries);
+        const rows: ProjectRow[] = [];
+
+        results.forEach(({ data, error }) => {
+          if (error) throw new Error(error.message);
+          rows.push(...((data ?? []) as ProjectRow[]));
+        });
+
+        const uniqueRows = mergeProjects([], rows).slice(0, 20);
+        setProjectSearchResults(uniqueRows);
+        setProjects((current) => mergeProjects(current, uniqueRows));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : String(error));
+        setProjectSearchResults([]);
+      } finally {
+        setProjectSearchLoading(false);
+      }
+    },
+    [supabase]
+  );
+
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      searchProjects(projectSearchKeyword);
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [projectSearchKeyword, searchProjects]);
+
   const projectMap = useMemo(() => {
-    return new Map(projects.map((project) => [project.id, project.name]));
+    return new Map(projects.map((project) => [project.id, formatProjectLabel(project)]));
   }, [projects]);
 
   const teamMap = useMemo(() => {
@@ -221,7 +323,7 @@ export default function ExpensesClient() {
     }
 
     if (expenseType === "indirect" && !selectedTeamId) {
-      return "部門コードを選択してください。";
+      return "チームを選択してください。";
     }
 
     for (let i = 0; i < details.length; i += 1) {
@@ -246,6 +348,7 @@ export default function ExpensesClient() {
     setExpenseType("direct");
     setSelectedProjectId("");
     setSelectedTeamId("");
+    setProjectSearchKeyword("");
     setDetails([createEmptyDetail()]);
   };
 
@@ -464,7 +567,10 @@ export default function ExpensesClient() {
                 className={`${styles.expenseTypeButton} ${
                   expenseType === "direct" ? styles.expenseTypeButtonActive : ""
                 }`}
-                onClick={() => setExpenseType("direct")}
+                onClick={() => {
+                  setExpenseType("direct");
+                  setSelectedTeamId("");
+                }}
               >
                 直接経費
               </button>
@@ -473,7 +579,10 @@ export default function ExpensesClient() {
                 className={`${styles.expenseTypeButton} ${
                   expenseType === "indirect" ? styles.expenseTypeButtonActive : ""
                 }`}
-                onClick={() => setExpenseType("indirect")}
+                onClick={() => {
+                  setExpenseType("indirect");
+                  setSelectedProjectId("");
+                }}
               >
                 間接経費
               </button>
@@ -481,25 +590,44 @@ export default function ExpensesClient() {
 
             <div className={styles.selectionArea}>
               <div className={styles.fieldLabel}>
-                {expenseType === "direct" ? "案件を選択" : "部門を選択"}
+                {expenseType === "direct" ? "案件を選択" : "チームを選択"}
               </div>
 
               {expenseType === "direct" ? (
                 <>
-                  <select
-                    value={selectedProjectId}
-                    onChange={(event) => setSelectedProjectId(event.target.value)}
-                    className={styles.select}
-                  >
-                    <option value="">- 案件を選択してください -</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
+                  <input
+                    value={projectSearchKeyword}
+                    onChange={(event) => setProjectSearchKeyword(event.target.value)}
+                    className={styles.input}
+                    placeholder="案件名または案件NOで検索"
+                  />
+
+                  <div className={styles.projectSearchBox}>
+                    {projectSearchLoading ? (
+                      <div className={styles.projectSearchEmpty}>検索中...</div>
+                    ) : projectSearchResults.length === 0 ? (
+                      <div className={styles.projectSearchEmpty}>案件が見つかりません。</div>
+                    ) : (
+                      projectSearchResults.map((project) => (
+                        <button
+                          key={project.id}
+                          type="button"
+                          className={`${styles.projectSearchOption} ${
+                            selectedProjectId === project.id ? styles.projectSearchOptionActive : ""
+                          }`}
+                          onClick={() => {
+                            setSelectedProjectId(project.id);
+                            setProjects((current) => mergeProjects(current, [project]));
+                          }}
+                        >
+                          {formatProjectLabel(project)}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
                   <div className={styles.helpText}>
-                    選択中: {selectedProject ? selectedProject.name : "未選択"}
+                    選択中: {selectedProject ? formatProjectLabel(selectedProject) : "未選択"}
                   </div>
                 </>
               ) : (
@@ -509,7 +637,7 @@ export default function ExpensesClient() {
                     onChange={(event) => setSelectedTeamId(event.target.value)}
                     className={styles.select}
                   >
-                    <option value="">- 部門コードを選択してください -</option>
+                    <option value="">- チームを選択してください -</option>
                     {teams.map((team) => (
                       <option key={team.id} value={team.id}>
                         {formatTeamLabel(team)}
@@ -670,7 +798,7 @@ export default function ExpensesClient() {
                   <thead>
                     <tr>
                       <th>申請種別</th>
-                      <th>案件 / 部門</th>
+                      <th>案件 / チーム</th>
                       <th>日付</th>
                       <th>カテゴリ</th>
                       <th>金額</th>
