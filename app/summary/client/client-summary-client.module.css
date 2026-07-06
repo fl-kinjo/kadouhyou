@@ -53,7 +53,7 @@
   justify-content: space-between;
   align-items: flex-end;
   gap: 20px;
-  margin-bottom: 18px;
+  margin-bottom: 28px;
 }
 
 .sectionTitle {
@@ -62,97 +62,24 @@
   font-weight: 900;
 }
 
-.targetActions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.primaryButton,
-.secondaryButton {
+.primaryLinkButton {
   min-width: 220px;
-  height: 40px;
+  min-height: 40px;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.primaryButton {
-  border: none;
   background: #cf0a0a;
   color: #fff;
-}
-
-.secondaryButton {
-  border: 1px solid #bbb;
-  background: #fff;
-  color: #333;
-  min-width: 120px;
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled {
-  opacity: 0.65;
-  cursor: default;
-}
-
-.mainTabs {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  border-bottom: 5px solid #ffd7e4;
-  margin: 0 0 14px;
-}
-
-.mainTab {
-  min-width: 170px;
-  height: 46px;
-  border: 1px solid #cfcfcf;
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  background: #d9d9d9;
-  color: #555;
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px;
+  font-size: 13px;
   font-weight: 900;
-  cursor: pointer;
-}
-
-.mainTabActive {
-  min-width: 250px;
-  background: #ffd7e4;
-  border-color: #ffd7e4;
-  color: #111;
-}
-
-.subTabs {
-  display: flex;
-  gap: 14px;
-  margin: 10px 0 12px;
-}
-
-.subTab {
-  min-width: 76px;
-  height: 40px;
-  border-radius: 999px;
-  border: 1px solid #bbb;
-  background: #fff;
-  color: #111;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.subTabActive {
-  border-color: #ff8da8;
-  background: #fff1f5;
-  color: #e00031;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
 .tableFrame {
   border: 1px solid #ddd;
-  border-radius: 10px;
-  overflow: hidden;
   background: #fff;
 }
 
@@ -162,7 +89,7 @@
 
 .table {
   width: 100%;
-  min-width: 1260px;
+  min-width: 1380px;
   border-collapse: collapse;
 }
 
@@ -171,31 +98,45 @@
   padding: 16px 12px;
   text-align: center;
   font-size: 14px;
+  font-weight: 700;
   white-space: nowrap;
   border-right: 1px solid #d0d0d0;
 }
 
 .table td {
-  padding: 16px 12px;
+  padding: 15px 12px;
   border-bottom: 1px solid #e5e5e5;
   border-right: 1px solid #f0f0f0;
   font-size: 14px;
   white-space: nowrap;
 }
 
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.clientHeader,
-.clientCell {
-  width: 170px;
-  min-width: 170px;
+.clientHeader {
+  width: 150px;
+  min-width: 150px;
   text-align: left !important;
 }
 
-.clientCell {
-  font-weight: 800;
+.clientGroupRow {
+  border-top: 4px solid #dcdcdc;
+}
+
+.clientGroupRow:first-child {
+  border-top: none;
+}
+
+.clientGroupCell {
+  padding: 18px 22px !important;
+  font-weight: 900;
+  background: #fff;
+  text-align: left;
+}
+
+.metricCell {
+  width: 150px;
+  min-width: 150px;
+  color: #777;
+  text-align: left;
   background: #fff;
 }
 
@@ -207,6 +148,10 @@
 .totalCell {
   font-weight: 900;
   border-left: 1px solid #d8d8d8;
+}
+
+.rateRow td {
+  border-bottom: 0;
 }
 
 .valueButton {
@@ -224,17 +169,6 @@
   color: #d6002f;
 }
 
-.targetInput {
-  width: 110px;
-  height: 34px;
-  border: 1px solid #cfcfcf;
-  border-radius: 6px;
-  padding: 0 8px;
-  text-align: right;
-  font: inherit;
-  box-sizing: border-box;
-}
-
 .emptyCell {
   padding: 24px 12px !important;
   text-align: center;
@@ -242,7 +176,7 @@
 }
 
 .note {
-  margin: 12px 0 0;
+  margin: 18px 0 0;
   color: #777;
   font-size: 13px;
 }
@@ -350,17 +284,7 @@
     flex-direction: column;
   }
 
-  .primaryButton,
-  .secondaryButton {
+  .primaryLinkButton {
     width: 100%;
-  }
-
-  .targetActions {
-    width: 100%;
-  }
-
-  .mainTab,
-  .mainTabActive {
-    min-width: 150px;
   }
 }

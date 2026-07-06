@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/app/utils/supabase/client";
 import styles from "./client-summary-client.module.css";
 
@@ -29,9 +29,6 @@ type ClientSalesTargetRow = {
   calculation_type: number;
   amount: number | string;
 };
-
-type SalesMode = "monthly" | "billing";
-type ViewMode = "actual" | "target" | "rate";
 
 type ClientSummaryRow = {
   key: string;
@@ -64,22 +61,8 @@ type DetailState = {
 };
 
 const OTHER_CLIENT_KEY = "__other__";
-
-const SALES_MODE_LABELS: Record<SalesMode, string> = {
-  monthly: "売上（月割計上）",
-  billing: "売上（請求月一括計上）",
-};
-
-const VIEW_MODE_LABELS: Record<ViewMode, string> = {
-  actual: "実績",
-  target: "目標",
-  rate: "達成率",
-};
-
-const CALCULATION_TYPE_BY_MODE: Record<SalesMode, number> = {
-  monthly: 0,
-  billing: 1,
-};
+const SALES_CALCULATION_TYPE_MONTHLY = 0;
+const PROJECT_FETCH_PAGE_SIZE = 1000;
 
 const PROJECT_STATUS_LABELS: Record<number, string> = {
   0: "保留",
@@ -145,12 +128,15 @@ function toNumber(value: number | string | null | undefined) {
 }
 
 function formatCurrency(value: number) {
+  if (Math.round(value) === 0) return "-";
   return `¥${Math.round(value).toLocaleString("ja-JP")}`;
 }
 
 function formatPercent(value: number | null) {
   if (value == null) return "-";
-  return `${(value * 100).toFixed(1)}%`;
+  const percent = value * 100;
+  const rounded = Number.isInteger(percent) ? String(percent) : percent.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return `${rounded}%`;
 }
 
 function formatMonth(value: string | null) {
@@ -166,32 +152,14 @@ function formatPeriod(startDate: string | null, endDate: string | null) {
   return formatMonth(startDate ?? endDate);
 }
 
-function parseCurrencyInput(value: string) {
-  const normalized = value.replace(/[¥,\s]/g, "");
-  const num = Number(normalized || 0);
-  return Number.isFinite(num) ? Math.round(num) : 0;
-}
-
-function getTargetInputKey(clientKey: string, monthKey: string, calculationType: number) {
-  return `${clientKey}_${monthKey}_${calculationType}`;
-}
-
 function getTargetRowKey(clientId: string | null, monthKey: string, calculationType: number) {
   return `${clientId ?? OTHER_CLIENT_KEY}_${monthKey}_${calculationType}`;
 }
 
-function buildProjectContributions(project: ProjectRow, salesMode: SalesMode, fiscalMonthSet: Set<string>) {
+function buildProjectContributions(project: ProjectRow, fiscalMonthSet: Set<string>) {
   const invoiceAmount = toNumber(project.invoice_amount);
 
   if (invoiceAmount === 0) return [] as { monthKey: string; amount: number }[];
-
-  if (salesMode === "billing") {
-    if (!project.invoice_month || !fiscalMonthSet.has(project.invoice_month)) {
-      return [];
-    }
-
-    return [{ monthKey: project.invoice_month, amount: invoiceAmount }];
-  }
 
   const projectMonthKeys = getMonthKeysBetween(project.start_date, project.end_date);
   const fallbackMonthKeys = project.invoice_month ? [project.invoice_month] : [];
@@ -210,21 +178,15 @@ export default function ClientSummaryClient() {
   const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
-  const [savingTargets, setSavingTargets] = useState(false);
   const [message, setMessage] = useState("");
   const [displayYear, setDisplayYear] = useState(new Date().getFullYear());
-  const [salesMode, setSalesMode] = useState<SalesMode>("monthly");
-  const [viewMode, setViewMode] = useState<ViewMode>("actual");
-  const [editingTargets, setEditingTargets] = useState(false);
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [targets, setTargets] = useState<ClientSalesTargetRow[]>([]);
-  const [targetInputs, setTargetInputs] = useState<Record<string, string>>({});
   const [detailState, setDetailState] = useState<DetailState | null>(null);
 
   const fiscalMonths = useMemo(() => getFiscalMonths(displayYear), [displayYear]);
-  const calculationType = CALCULATION_TYPE_BY_MODE[salesMode];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -234,37 +196,46 @@ export default function ClientSummaryClient() {
       const fromMonth = fiscalMonths[0]?.key;
       const toMonth = fiscalMonths[fiscalMonths.length - 1]?.key;
 
-      const [clientsRes, projectsRes, targetsRes] = await Promise.all([
-        supabase.from("client").select("id,name,is_focus").order("is_focus", { ascending: false }).order("name", { ascending: true }),
+      const [clientsRes, targetsRes] = await Promise.all([
         supabase
-          .from("project")
-          .select("id,name,client_id,status,invoice_amount,invoice_month,start_date,end_date")
-          .order("updated_at", { ascending: false }),
+          .from("client")
+          .select("id,name,is_focus")
+          .order("is_focus", { ascending: false })
+          .order("name", { ascending: true }),
         supabase
           .from("client_sales_target")
           .select("id,client_id,target_year_month,calculation_type,amount")
           .gte("target_year_month", fromMonth)
-          .lte("target_year_month", toMonth),
+          .lte("target_year_month", toMonth)
+          .eq("calculation_type", SALES_CALCULATION_TYPE_MONTHLY),
       ]);
 
       if (clientsRes.error) throw new Error(clientsRes.error.message);
-      if (projectsRes.error) throw new Error(projectsRes.error.message);
       if (targetsRes.error) throw new Error(targetsRes.error.message);
 
-      const nextClients = (clientsRes.data ?? []) as ClientRow[];
-      const nextTargets = (targetsRes.data ?? []) as ClientSalesTargetRow[];
+      const allProjects: ProjectRow[] = [];
+      let from = 0;
 
-      setClients(nextClients);
-      setProjects((projectsRes.data ?? []) as ProjectRow[]);
-      setTargets(nextTargets);
+      while (true) {
+        const to = from + PROJECT_FETCH_PAGE_SIZE - 1;
+        const projectsRes = await supabase
+          .from("project")
+          .select("id,name,client_id,status,invoice_amount,invoice_month,start_date,end_date")
+          .order("updated_at", { ascending: false })
+          .range(from, to);
 
-      const nextInputs: Record<string, string> = {};
-      for (const target of nextTargets) {
-        const clientKey = target.client_id ?? OTHER_CLIENT_KEY;
-        const inputKey = getTargetInputKey(clientKey, target.target_year_month, target.calculation_type);
-        nextInputs[inputKey] = String(Math.round(toNumber(target.amount)));
+        if (projectsRes.error) throw new Error(projectsRes.error.message);
+
+        const rows = (projectsRes.data ?? []) as ProjectRow[];
+        allProjects.push(...rows);
+
+        if (rows.length < PROJECT_FETCH_PAGE_SIZE) break;
+        from += PROJECT_FETCH_PAGE_SIZE;
       }
-      setTargetInputs(nextInputs);
+
+      setClients((clientsRes.data ?? []) as ClientRow[]);
+      setProjects(allProjects);
+      setTargets((targetsRes.data ?? []) as ClientSalesTargetRow[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -313,7 +284,7 @@ export default function ClientSummaryClient() {
       const values = actualMap.get(clientKey);
       if (!values) continue;
 
-      for (const contribution of buildProjectContributions(project, salesMode, fiscalMonthSet)) {
+      for (const contribution of buildProjectContributions(project, fiscalMonthSet)) {
         const monthIndex = monthIndexMap.get(contribution.monthKey);
         if (monthIndex == null) continue;
         values[monthIndex] = (values[monthIndex] ?? 0) + contribution.amount;
@@ -322,7 +293,6 @@ export default function ClientSummaryClient() {
 
     const targetMap = new Map<string, number>();
     for (const target of targets) {
-      if (target.calculation_type !== calculationType) continue;
       const key = getTargetRowKey(target.client_id, target.target_year_month, target.calculation_type);
       targetMap.set(key, toNumber(target.amount));
     }
@@ -330,11 +300,7 @@ export default function ClientSummaryClient() {
     return rowsBase.map((row) => {
       const actualMonths = actualMap.get(row.key) ?? fiscalMonths.map(() => 0);
       const targetMonths = fiscalMonths.map((month) => {
-        const inputKey = getTargetInputKey(row.key, month.key, calculationType);
-        if (targetInputs[inputKey] != null) {
-          return parseCurrencyInput(targetInputs[inputKey]);
-        }
-        const storedKey = getTargetRowKey(row.clientId, month.key, calculationType);
+        const storedKey = getTargetRowKey(row.clientId, month.key, SALES_CALCULATION_TYPE_MONTHLY);
         return targetMap.get(storedKey) ?? 0;
       });
       const actualTotal = actualMonths.reduce((sum, value) => sum + value, 0);
@@ -355,15 +321,7 @@ export default function ClientSummaryClient() {
         rateTotal,
       };
     });
-  }, [calculationType, fiscalMonthSet, fiscalMonths, focusClientIdSet, focusClients, projects, salesMode, targetInputs, targets]);
-
-  const existingTargetMap = useMemo(() => {
-    const map = new Map<string, ClientSalesTargetRow>();
-    for (const target of targets) {
-      map.set(getTargetRowKey(target.client_id, target.target_year_month, target.calculation_type), target);
-    }
-    return map;
-  }, [targets]);
+  }, [fiscalMonthSet, fiscalMonths, focusClientIdSet, focusClients, projects, targets]);
 
   const detailProjects = useMemo<DetailProjectRow[]>(() => {
     if (!detailState) return [];
@@ -378,7 +336,7 @@ export default function ClientSummaryClient() {
       const clientKey = project.client_id && focusClientIdSet.has(project.client_id) ? project.client_id : OTHER_CLIENT_KEY;
       if (clientKey !== detailState.clientKey) continue;
 
-      const amount = buildProjectContributions(project, salesMode, fiscalMonthSet)
+      const amount = buildProjectContributions(project, fiscalMonthSet)
         .filter((contribution) => targetMonthKeys.has(contribution.monthKey))
         .reduce((sum, contribution) => sum + contribution.amount, 0);
 
@@ -400,88 +358,11 @@ export default function ClientSummaryClient() {
 
     result.sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, "ja"));
     return result;
-  }, [clientMap, detailState, fiscalMonthSet, fiscalMonths, focusClientIdSet, projects, salesMode]);
+  }, [clientMap, detailState, fiscalMonthSet, fiscalMonths, focusClientIdSet, projects]);
 
   const updateUrlYear = (nextYear: number) => {
     setDisplayYear(nextYear);
-    setEditingTargets(false);
     setDetailState(null);
-  };
-
-  const startEditTargets = () => {
-    setViewMode("target");
-    setEditingTargets(true);
-  };
-
-  const cancelEditTargets = () => {
-    const nextInputs: Record<string, string> = {};
-    for (const target of targets) {
-      const clientKey = target.client_id ?? OTHER_CLIENT_KEY;
-      const inputKey = getTargetInputKey(clientKey, target.target_year_month, target.calculation_type);
-      nextInputs[inputKey] = String(Math.round(toNumber(target.amount)));
-    }
-    setTargetInputs(nextInputs);
-    setEditingTargets(false);
-  };
-
-  const saveTargets = async () => {
-    setSavingTargets(true);
-    setMessage("");
-
-    try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
-
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
-
-      const rowsToSave = summaryRows.flatMap((row) =>
-        fiscalMonths.map((month) => {
-          const inputKey = getTargetInputKey(row.key, month.key, calculationType);
-          return {
-            client_id: row.clientId,
-            target_year_month: month.key,
-            calculation_type: calculationType,
-            amount: parseCurrencyInput(targetInputs[inputKey] ?? "0"),
-          };
-        })
-      );
-
-      for (const row of rowsToSave) {
-        const existing = existingTargetMap.get(
-          getTargetRowKey(row.client_id, row.target_year_month, row.calculation_type)
-        );
-
-        if (existing) {
-          const { error } = await supabase
-            .from("client_sales_target")
-            .update({
-              amount: row.amount,
-              updated_by: userId,
-            })
-            .eq("id", existing.id);
-
-          if (error) throw new Error(error.message);
-        } else if (row.amount !== 0) {
-          const { error } = await supabase.from("client_sales_target").insert({
-            client_id: row.client_id,
-            target_year_month: row.target_year_month,
-            calculation_type: row.calculation_type,
-            amount: row.amount,
-            updated_by: userId,
-          });
-
-          if (error) throw new Error(error.message);
-        }
-      }
-
-      setEditingTargets(false);
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSavingTargets(false);
-    }
   };
 
   const openDetail = (row: ClientSummaryRow, monthKey: string) => {
@@ -498,46 +379,12 @@ export default function ClientSummaryClient() {
     return fiscalMonths.find((month) => month.key === detailState.monthKey)?.label ?? detailState.monthKey;
   }, [detailState, fiscalMonths]);
 
-  const renderValueCell = (row: ClientSummaryRow, monthIndex: number | "annual") => {
+  const renderActualValue = (row: ClientSummaryRow, monthIndex: number | "annual") => {
     const monthKey = monthIndex === "annual" ? "annual" : fiscalMonths[monthIndex].key;
-
-    if (viewMode === "target") {
-      if (monthIndex === "annual") {
-        return <span>{formatCurrency(row.targetTotal)}</span>;
-      }
-
-      const inputKey = getTargetInputKey(row.key, monthKey, calculationType);
-
-      if (editingTargets) {
-        return (
-          <input
-            className={styles.targetInput}
-            value={targetInputs[inputKey] ?? ""}
-            onChange={(event) =>
-              setTargetInputs((current) => ({
-                ...current,
-                [inputKey]: event.target.value,
-              }))
-            }
-            inputMode="numeric"
-            placeholder="0"
-          />
-        );
-      }
-
-      return <span>{formatCurrency(row.targetMonths[monthIndex])}</span>;
-    }
-
-    if (viewMode === "rate") {
-      const rate = monthIndex === "annual" ? row.rateTotal : row.rateMonths[monthIndex];
-      return (
-        <button type="button" className={styles.valueButton} onClick={() => openDetail(row, monthKey)}>
-          {formatPercent(rate)}
-        </button>
-      );
-    }
-
     const actual = monthIndex === "annual" ? row.actualTotal : row.actualMonths[monthIndex];
+
+    if (Math.round(actual) === 0) return <span>-</span>;
+
     return (
       <button type="button" className={styles.valueButton} onClick={() => openDetail(row, monthKey)}>
         {formatCurrency(actual)}
@@ -548,9 +395,7 @@ export default function ClientSummaryClient() {
   return (
     <main className={styles.page}>
       <div className={styles.headerRow}>
-        <div>
-          <h1 className={styles.pageTitle}>クライアント別年間実績</h1>
-        </div>
+        <h1 className={styles.pageTitle}>クライアント別年間実績</h1>
       </div>
 
       {message && <p className={styles.message}>{message}</p>}
@@ -568,56 +413,9 @@ export default function ClientSummaryClient() {
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>クライアント別サマリー</h2>
-          <div className={styles.targetActions}>
-            {editingTargets ? (
-              <>
-                <button type="button" className={styles.secondaryButton} onClick={cancelEditTargets} disabled={savingTargets}>
-                  キャンセル
-                </button>
-                <button type="button" className={styles.primaryButton} onClick={saveTargets} disabled={savingTargets}>
-                  {savingTargets ? "保存中..." : "目標金額を保存する"}
-                </button>
-              </>
-            ) : (
-              <button type="button" className={styles.primaryButton} onClick={startEditTargets}>
-                目標金額を編集する
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className={styles.mainTabs}>
-          {Object.entries(SALES_MODE_LABELS).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={`${styles.mainTab} ${salesMode === key ? styles.mainTabActive : ""}`}
-              onClick={() => {
-                setSalesMode(key as SalesMode);
-                setEditingTargets(false);
-                setDetailState(null);
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.subTabs}>
-          {Object.entries(VIEW_MODE_LABELS).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={`${styles.subTab} ${viewMode === key ? styles.subTabActive : ""}`}
-              onClick={() => {
-                setViewMode(key as ViewMode);
-                setEditingTargets(false);
-                setDetailState(null);
-              }}
-            >
-              {label}
-            </button>
-          ))}
+          <Link href={`/summary/client/targets?year=${displayYear}`} className={styles.primaryLinkButton}>
+            目標金額を編集する
+          </Link>
         </div>
 
         <div className={styles.tableFrame}>
@@ -629,7 +427,7 @@ export default function ClientSummaryClient() {
                   {fiscalMonths.map((month) => (
                     <th key={month.key}>{month.label}</th>
                   ))}
-                  <th>年間</th>
+                  <th>年間合計</th>
                 </tr>
               </thead>
               <tbody>
@@ -643,15 +441,40 @@ export default function ClientSummaryClient() {
                   </tr>
                 ) : (
                   summaryRows.map((row) => (
-                    <tr key={row.key}>
-                      <td className={styles.clientCell}>{row.clientName}</td>
-                      {fiscalMonths.map((month, index) => (
-                        <td key={`${row.key}-${month.key}`} className={styles.numberCell}>
-                          {renderValueCell(row, index)}
+                    <Fragment key={row.key}>
+                      <tr className={styles.clientGroupRow}>
+                        <td colSpan={14} className={styles.clientGroupCell}>
+                          {row.clientName}
                         </td>
-                      ))}
-                      <td className={styles.totalCell}>{renderValueCell(row, "annual")}</td>
-                    </tr>
+                      </tr>
+                      <tr>
+                        <td className={styles.metricCell}>目標金額</td>
+                        {fiscalMonths.map((month, monthIndex) => (
+                          <td key={`${row.key}-${month.key}-target`} className={styles.numberCell}>
+                            {formatCurrency(row.targetMonths[monthIndex])}
+                          </td>
+                        ))}
+                        <td className={styles.totalCell}>{formatCurrency(row.targetTotal)}</td>
+                      </tr>
+                      <tr>
+                        <td className={styles.metricCell}>単月実績</td>
+                        {fiscalMonths.map((month, monthIndex) => (
+                          <td key={`${row.key}-${month.key}-actual`} className={styles.numberCell}>
+                            {renderActualValue(row, monthIndex)}
+                          </td>
+                        ))}
+                        <td className={styles.totalCell}>{renderActualValue(row, "annual")}</td>
+                      </tr>
+                      <tr className={styles.rateRow}>
+                        <td className={styles.metricCell}>達成率</td>
+                        {fiscalMonths.map((month, monthIndex) => (
+                          <td key={`${row.key}-${month.key}-rate`} className={styles.numberCell}>
+                            {formatPercent(row.rateMonths[monthIndex])}
+                          </td>
+                        ))}
+                        <td className={styles.totalCell}>{formatPercent(row.rateTotal)}</td>
+                      </tr>
+                    </Fragment>
                   ))
                 )}
               </tbody>
@@ -669,7 +492,7 @@ export default function ClientSummaryClient() {
               <div>
                 <h2 className={styles.modalTitle}>関連案件一覧</h2>
                 <p className={styles.modalLead}>
-                  {detailState.clientName} / {detailMonthLabel} / {SALES_MODE_LABELS[salesMode]}
+                  {detailState.clientName} / {detailMonthLabel} / 売上（月割計上）
                 </p>
               </div>
               <button type="button" className={styles.modalCloseButton} onClick={() => setDetailState(null)}>

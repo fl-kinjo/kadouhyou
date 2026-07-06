@@ -1,0 +1,449 @@
+.page {
+  padding: 44px 52px;
+  max-width: 1320px;
+}
+
+.headerRow {
+  border-bottom: 1px solid #d5d5d5;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.message {
+  margin: 0 0 16px;
+  color: #b00020;
+  font-weight: 700;
+}
+
+.yearRow {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin: 0 0 38px;
+}
+
+.yearButton {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: #111;
+}
+
+.yearText {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.summaryCards {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.summaryCard {
+  min-width: 300px;
+  min-height: 104px;
+  background: #efefef;
+  border-radius: 10px;
+  padding: 18px 28px;
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto 1fr;
+  column-gap: 16px;
+  align-items: end;
+  box-sizing: border-box;
+}
+
+.summaryLabel {
+  grid-column: 1 / -1;
+  align-self: start;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.summaryValue,
+.summaryValueAccent {
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.summaryValueAccent {
+  color: #f0828d;
+}
+
+.summaryUnit {
+  padding-bottom: 4px;
+  font-size: 15px;
+}
+
+.tableFrame {
+  width: min(860px, 100%);
+  border: 1px solid #dcdcdc;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  background: #d8d8d8;
+  padding: 16px 18px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid #e1e1e1;
+  font-size: 14px;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.statusConfirmed,
+.statusMissing {
+  display: inline-flex;
+  min-width: 78px;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.statusConfirmed {
+  background: #c9efb8;
+  color: #138100;
+}
+
+.statusMissing {
+  background: #ffd1df;
+  color: #d7003c;
+}
+
+.actionCell {
+  text-align: right;
+  width: 110px;
+}
+
+.actionButton {
+  min-width: 50px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #777;
+  background: #fff;
+  color: #111;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.emptyCell {
+  padding: 24px 12px !important;
+  text-align: center;
+  color: #666;
+}
+
+.note {
+  margin: 22px 0 0;
+  color: #777;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 24px 16px;
+  }
+
+  .summaryCard {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.modalCard {
+  position: relative;
+  width: min(860px, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 2px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+}
+
+.modalInner {
+  padding: 28px 64px 44px;
+}
+
+.modalCloseButton {
+  position: absolute;
+  top: 20px;
+  right: 28px;
+  width: 52px;
+  height: 52px;
+  border: none;
+  background: transparent;
+  color: #111;
+  font-size: 56px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modalTitle {
+  margin: 0 0 34px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.modalInfoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px 72px;
+  margin: 0 auto 36px;
+  max-width: 560px;
+}
+
+.modalInfoGrid div,
+.singleField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modalInfoGrid span,
+.singleField span,
+.monthField span,
+.modalSummaryBox span,
+.modalSectionTitle {
+  color: #777985;
+  font-weight: 800;
+}
+
+.modalInfoGrid strong,
+.singleField strong {
+  font-size: 15px;
+}
+
+.formBlock {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  max-width: 360px;
+  margin-bottom: 12px;
+}
+
+.amountInputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amountInputRow input {
+  width: 180px;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid #bfbfbf;
+  border-radius: 4px;
+  padding: 4px 10px;
+  text-align: right;
+  font-size: 15px;
+}
+
+.monthHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0 12px;
+}
+
+.modalSectionTitle {
+  margin: 0;
+  font-size: 16px;
+}
+
+.autoButton {
+  min-width: 112px;
+  min-height: 32px;
+  border: 1px solid #777;
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.modalMonthGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 14px 28px;
+  margin-bottom: 28px;
+}
+
+.monthField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.monthField input {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid #bfbfbf;
+  border-radius: 4px;
+  padding: 4px 10px;
+  text-align: right;
+  font-size: 15px;
+}
+
+.monthField strong {
+  min-height: 24px;
+  font-weight: 700;
+}
+
+.modalSummaryBox {
+  border-top: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  padding: 16px 0;
+  margin: 8px 0 32px;
+  display: grid;
+  gap: 10px;
+}
+
+.modalSummaryBox div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+}
+
+.negativeValue {
+  color: #e00000;
+}
+
+.modalButtonRow {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+}
+
+.outlineButton,
+.redButton {
+  min-width: 180px;
+  height: 40px;
+  border-radius: 999px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.outlineButton {
+  border: 1px solid #d40000;
+  background: #fff;
+  color: #d40000;
+}
+
+.redButton {
+  border: 1px solid #d40000;
+  background: #d40000;
+  color: #fff;
+}
+
+.outlineButton:disabled,
+.redButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.confirmNotice {
+  margin: 34px 0 32px;
+  text-align: center;
+  color: #e00000;
+  font-weight: 700;
+}
+
+.completeInner {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.completeTitle {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.closeCompleteButton {
+  min-width: 86px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .modalOverlay {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .modalInner {
+    padding: 26px 20px 32px;
+  }
+
+  .modalCloseButton {
+    top: 12px;
+    right: 12px;
+  }
+
+  .modalInfoGrid,
+  .modalMonthGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .modalButtonRow {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .outlineButton,
+  .redButton {
+    width: 100%;
+  }
+}
