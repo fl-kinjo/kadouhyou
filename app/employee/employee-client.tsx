@@ -22,6 +22,7 @@ type Profile = {
   last_name: string | null;
   first_name: string | null;
   is_admin: number | null;
+  is_general_affairs: number | null;
   status: number | null;
   created_at: string;
 };
@@ -181,6 +182,7 @@ export default function EmployeeClient() {
   const [warningMsg, setWarningMsg] = useState("");
   const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isGeneralAffairs, setIsGeneralAffairs] = useState(false);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -199,6 +201,7 @@ export default function EmployeeClient() {
   const [formLastName, setFormLastName] = useState("");
   const [formFirstName, setFormFirstName] = useState("");
   const [formIsAdmin, setFormIsAdmin] = useState(false);
+  const [formIsGeneralAffairs, setFormIsGeneralAffairs] = useState(false);
   const [formStatus, setFormStatus] = useState("0");
   const [formTeamIds, setFormTeamIds] = useState<string[]>([""]);
   const [formJobIds, setFormJobIds] = useState<string[]>([""]);
@@ -283,10 +286,10 @@ export default function EmployeeClient() {
         { data: manMonthData, error: manMonthError },
         { data: teamLeaderData, error: teamLeaderError },
       ] = await Promise.all([
-        supabase.from("profiles_2").select("id,is_admin").eq("id", authUserId).maybeSingle(),
+        supabase.from("profiles_2").select("id,is_admin,is_general_affairs").eq("id", authUserId).maybeSingle(),
         supabase
           .from("profiles_2")
-          .select("id,email,last_name,first_name,is_admin,status,created_at")
+          .select("id,email,last_name,first_name,is_admin,is_general_affairs,status,created_at")
           .order("created_at", { ascending: false }),
         supabase.from("team").select("id,parent_id,name").order("created_at", { ascending: true }),
         supabase.from("job").select("id,name").order("created_at", { ascending: true }),
@@ -309,6 +312,7 @@ export default function EmployeeClient() {
       if (teamLeaderError) throw new Error(teamLeaderError.message);
 
       const currentIsAdmin = currentProfile?.is_admin === 1;
+      const currentIsGeneralAffairs = currentProfile?.is_general_affairs === 1;
       const nextTeamLeaders = (teamLeaderData ?? []) as TeamLeader[];
       const currentLeaderTeamIds = nextTeamLeaders
         .filter((leader) => leader.profile_id === authUserId)
@@ -316,6 +320,7 @@ export default function EmployeeClient() {
 
       setCurrentProfileId(authUserId);
       setIsAdmin(currentIsAdmin);
+      setIsGeneralAffairs(currentIsGeneralAffairs);
       setIsTeamLeader(currentLeaderTeamIds.length > 0);
 
       const nextProfiles = (profileData ?? []) as Profile[];
@@ -337,7 +342,7 @@ export default function EmployeeClient() {
         (profile) => normalizeStatusValue(profile.status) !== 2 && (isBlank(profile.last_name) || isBlank(profile.first_name))
       );
 
-      if (currentIsAdmin && hasUnregisteredUser) {
+      if ((currentIsAdmin || currentIsGeneralAffairs) && hasUnregisteredUser) {
         setWarningMsg("未登録のユーザーがいます");
       }
     } catch (error) {
@@ -394,12 +399,14 @@ export default function EmployeeClient() {
     return result;
   }, [leaderEffectiveTeamIds, profileTeams]);
 
+  const canManageEmployee = isAdmin || isGeneralAffairs;
+
   const canManageMenuForProfile = (profileId: string) => {
-    if (isAdmin) return true;
+    if (canManageEmployee) return true;
     return leaderManagedProfileIds.has(profileId);
   };
 
-  const showOperationColumn = isAdmin || isTeamLeader;
+  const showOperationColumn = canManageEmployee || isTeamLeader;
 
   const rows = useMemo<EmployeeRow[]>(() => {
     const teamPathHelper = buildTeamPathMap(teams);
@@ -435,7 +442,7 @@ export default function EmployeeClient() {
 
     return profiles
       .filter((profile) => {
-        if (!isAdmin && !leaderManagedProfileIds.has(profile.id)) return false;
+        if (!canManageEmployee && !leaderManagedProfileIds.has(profile.id)) return false;
         const status = normalizeStatusValue(profile.status);
         return visibleStatuses.includes(status) && !isBlank(profile.last_name) && !isBlank(profile.first_name);
       })
@@ -459,7 +466,7 @@ export default function EmployeeClient() {
         status: normalizeStatusValue(profile.status),
         created_at: profile.created_at,
       }));
-  }, [isAdmin, jobs, leaderManagedProfileIds, profileJobs, profiles, profileTeams, teams, visibleStatuses]);
+  }, [canManageEmployee, jobs, leaderManagedProfileIds, profileJobs, profiles, profileTeams, teams, visibleStatuses]);
 
   const unregisteredProfiles = useMemo(() => {
     return profiles
@@ -517,6 +524,7 @@ export default function EmployeeClient() {
     setFormLastName("");
     setFormFirstName("");
     setFormIsAdmin(false);
+    setFormIsGeneralAffairs(false);
     setFormStatus("0");
     setFormTeamIds([""]);
     setFormJobIds([""]);
@@ -525,7 +533,7 @@ export default function EmployeeClient() {
   };
 
   const openCreate = () => {
-    if (!isAdmin) return;
+    if (!canManageEmployee) return;
     setErrorMsg("");
     setMode("create");
     resetForm();
@@ -538,7 +546,7 @@ export default function EmployeeClient() {
   };
 
   const openEdit = (profileId: string) => {
-    if (!isAdmin) return;
+    if (!canManageEmployee) return;
 
     setErrorMsg("");
     setMode("edit");
@@ -554,6 +562,7 @@ export default function EmployeeClient() {
     setFormLastName(profile.last_name ?? "");
     setFormFirstName(profile.first_name ?? "");
     setFormIsAdmin(profile.is_admin === 1);
+    setFormIsGeneralAffairs(profile.is_general_affairs === 1);
     setFormStatus(String(profile.status ?? 0));
 
     const nextTeamIds = profileTeams
@@ -770,7 +779,7 @@ export default function EmployeeClient() {
   };
 
   const save = async () => {
-    if (!isAdmin) {
+    if (!canManageEmployee) {
       setErrorMsg("編集権限がありません。");
       return;
     }
@@ -799,7 +808,8 @@ export default function EmployeeClient() {
         .update({
           last_name: formLastName.trim(),
           first_name: formFirstName.trim(),
-          is_admin: formIsAdmin ? 1 : 0,
+          ...(isAdmin ? { is_admin: formIsAdmin ? 1 : 0 } : {}),
+          is_general_affairs: formIsGeneralAffairs ? 1 : 0,
           status: statusLabelToValue(formStatus),
           updated_by: updaterId,
         })
@@ -883,7 +893,7 @@ export default function EmployeeClient() {
           <Link href="/job" className={styles.headerLink}>
             職種管理へ
           </Link>
-          {isAdmin && (
+          {canManageEmployee && (
             <button type="button" onClick={openCreate} className={styles.btnRed} disabled={saving}>
               ＋ 新規社員登録
             </button>
@@ -893,7 +903,7 @@ export default function EmployeeClient() {
 
       <div className={styles.topBorder} />
 
-      {isAdmin && warningMsg && (
+      {canManageEmployee && warningMsg && (
         <details className={styles.warningBox}>
           <summary className={styles.warningSummary}>{warningMsg}</summary>
           <div className={styles.warningBody}>
@@ -978,7 +988,7 @@ export default function EmployeeClient() {
                     {showOperationColumn && (
                       <td className={styles.tdRight}>
                         <div className={styles.operationButtons}>
-                          {isAdmin && (
+                          {canManageEmployee && (
                             <button
                               type="button"
                               onClick={() => openEdit(row.profile_id)}
@@ -1009,7 +1019,7 @@ export default function EmployeeClient() {
         </div>
       </div>
 
-      {open && isAdmin && (
+      {open && canManageEmployee && (
         <div className={styles.modalOverlay} onClick={closeModal}>
           <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
@@ -1067,8 +1077,21 @@ export default function EmployeeClient() {
                     type="checkbox"
                     checked={formIsAdmin}
                     onChange={(event) => setFormIsAdmin(event.target.checked)}
+                    disabled={!isAdmin}
                   />
                   <span>管理者にする</span>
+                </label>
+              </div>
+
+              <div className={styles.formRow}>
+                <div className={styles.formLabel}>総務権限</div>
+                <label className={styles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    checked={formIsGeneralAffairs}
+                    onChange={(event) => setFormIsGeneralAffairs(event.target.checked)}
+                  />
+                  <span>総務権限を付与する</span>
                 </label>
               </div>
 

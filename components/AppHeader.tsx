@@ -74,16 +74,18 @@ function isLeaderAllowedAdminOnlyHref(href: string) {
     "/attendance-management",
     "/expenses-management",
     "/project-request",
-    "/employee",
-    "/team",
-    "/job",
   ].includes(href);
+}
+
+function isGeneralAffairsAllowedHref(href: string) {
+  return ["/employee", "/team", "/job"].includes(href);
 }
 
 export default function AppHeader() {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isGeneralAffairs, setIsGeneralAffairs] = useState(false);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [permissionMap, setPermissionMap] = useState<Map<string, boolean>>(new Map());
@@ -110,6 +112,7 @@ export default function AppHeader() {
 
         if (authError || !authData.user) {
           setIsAdmin(false);
+          setIsGeneralAffairs(false);
           setIsTeamLeader(false);
           setPermissionMap(new Map());
           return;
@@ -122,7 +125,7 @@ export default function AppHeader() {
         ] = await Promise.all([
             supabase
               .from("profiles_2")
-              .select("is_admin")
+              .select("is_admin,is_general_affairs")
               .eq("id", authData.user.id)
               .maybeSingle(),
             supabase
@@ -137,8 +140,10 @@ export default function AppHeader() {
 
         if (profileError) {
           setIsAdmin(false);
+          setIsGeneralAffairs(false);
         } else {
           setIsAdmin(profileData?.is_admin === 1);
+          setIsGeneralAffairs(profileData?.is_general_affairs === 1);
         }
 
         if (teamLeaderError) {
@@ -176,6 +181,11 @@ export default function AppHeader() {
         ...group,
         items: group.items.filter((item) => {
           const isLeaderRequiredMenu = isTeamLeader && isLeaderAllowedAdminOnlyHref(item.href);
+          const isGeneralAffairsMenu = isGeneralAffairsAllowedHref(item.href);
+
+          if (isGeneralAffairsMenu) {
+            return isAdmin || isGeneralAffairs;
+          }
 
           if (!groupCanView && !isLeaderRequiredMenu) return false;
           if ("adminOnly" in item && item.adminOnly && !isAdmin && !isLeaderRequiredMenu) return false;
@@ -185,7 +195,7 @@ export default function AppHeader() {
         }),
       };
     }).filter((group) => group.items.length > 0);
-  }, [isAdmin, isTeamLeader, permissionMap]);
+  }, [isAdmin, isGeneralAffairs, isTeamLeader, permissionMap]);
 
   const controlledMenuItem = useMemo(() => {
     const items = MENU_GROUPS.flatMap((group) => group.items.map((item) => ({ groupKey: group.key, ...item })));

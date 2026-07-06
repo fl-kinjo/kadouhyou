@@ -185,6 +185,7 @@ export default function ClientSummaryClient() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [targets, setTargets] = useState<ClientSalesTargetRow[]>([]);
   const [detailState, setDetailState] = useState<DetailState | null>(null);
+  const [canEditTargets, setCanEditTargets] = useState(false);
 
   const fiscalMonths = useMemo(() => getFiscalMonths(displayYear), [displayYear]);
 
@@ -196,7 +197,7 @@ export default function ClientSummaryClient() {
       const fromMonth = fiscalMonths[0]?.key;
       const toMonth = fiscalMonths[fiscalMonths.length - 1]?.key;
 
-      const [clientsRes, targetsRes] = await Promise.all([
+      const [clientsRes, targetsRes, authRes] = await Promise.all([
         supabase
           .from("client")
           .select("id,name,is_focus")
@@ -208,10 +209,26 @@ export default function ClientSummaryClient() {
           .gte("target_year_month", fromMonth)
           .lte("target_year_month", toMonth)
           .eq("calculation_type", SALES_CALCULATION_TYPE_MONTHLY),
+        supabase.auth.getUser(),
       ]);
 
       if (clientsRes.error) throw new Error(clientsRes.error.message);
       if (targetsRes.error) throw new Error(targetsRes.error.message);
+
+      let nextCanEditTargets = false;
+      const userId = authRes.data.user?.id;
+
+      if (userId) {
+        const [profileRes, teamLeaderRes] = await Promise.all([
+          supabase.from("profiles_2").select("is_admin").eq("id", userId).maybeSingle(),
+          supabase.from("team_leader").select("id").eq("profile_id", userId).limit(1),
+        ]);
+
+        if (profileRes.error) throw new Error(profileRes.error.message);
+        if (teamLeaderRes.error) throw new Error(teamLeaderRes.error.message);
+
+        nextCanEditTargets = profileRes.data?.is_admin === 1 || (teamLeaderRes.data ?? []).length > 0;
+      }
 
       const allProjects: ProjectRow[] = [];
       let from = 0;
@@ -236,6 +253,7 @@ export default function ClientSummaryClient() {
       setClients((clientsRes.data ?? []) as ClientRow[]);
       setProjects(allProjects);
       setTargets((targetsRes.data ?? []) as ClientSalesTargetRow[]);
+      setCanEditTargets(nextCanEditTargets);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -413,9 +431,11 @@ export default function ClientSummaryClient() {
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>クライアント別サマリー</h2>
-          <Link href={`/summary/client/targets?year=${displayYear}`} className={styles.primaryLinkButton}>
-            目標金額を編集する
-          </Link>
+          {canEditTargets && (
+            <Link href={`/summary/client/targets?year=${displayYear}`} className={styles.primaryLinkButton}>
+              目標金額を編集する
+            </Link>
+          )}
         </div>
 
         <div className={styles.tableFrame}>
