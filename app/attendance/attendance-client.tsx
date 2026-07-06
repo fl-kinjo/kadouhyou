@@ -84,7 +84,8 @@ type CorrectionFormState = {
   work_date: string;
   start_time: string;
   end_time: string;
-  away_duration: string;
+  away_hours: string;
+  away_minutes: string;
   status_label: string;
   comment: string;
 };
@@ -181,21 +182,32 @@ function formatSummaryDuration(minutes: number) {
   return `${hh}:${mm}`;
 }
 
-function parseDurationToMinutes(value: string) {
-  const text = value.trim();
-  if (!text) return 0;
+function splitDurationToFields(minutes: number | null | undefined) {
+  const safe = Math.max(0, minutes ?? 0);
+  return {
+    hours: String(Math.floor(safe / 60)),
+    minutes: String(safe % 60),
+  };
+}
 
-  const parts = text.split(":");
-  if (parts.length !== 2) return null;
+function parseDurationFieldsToMinutes(hoursValue: string, minutesValue: string) {
+  const hoursText = hoursValue.trim();
+  const minutesText = minutesValue.trim();
 
-  const hh = Number(parts[0]);
-  const mm = Number(parts[1]);
+  const hours = hoursText === "" ? 0 : Number(hoursText);
+  const minutes = minutesText === "" ? 0 : Number(minutesText);
 
-  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || mm < 0 || mm >= 60) {
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    minutes < 0 ||
+    minutes >= 60
+  ) {
     return null;
   }
 
-  return hh * 60 + mm;
+  return hours * 60 + minutes;
 }
 
 function getWorkedMinutes(startTime: string | null, endTime: string | null, awayMinutes: number | null) {
@@ -325,6 +337,27 @@ function getStatusTypeFromLabel(
   }
 }
 
+function getLeaveRequestStatusInfo(leaveRequest: LeaveRequestRow | null) {
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.pending) {
+    return { label: "休暇申請中", type: "leavePending" as const };
+  }
+
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.rejected) {
+    return { label: "休暇申請却下", type: "leaveRejected" as const };
+  }
+
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.canceled) {
+    return { label: "休暇申請取消", type: "leaveCanceled" as const };
+  }
+
+  if (leaveRequest?.approval_status === APPROVAL_STATUS.approved) {
+    const label = getLeaveTypeLabel(leaveRequest.leave_type);
+    return { label, type: getStatusTypeFromLabel(label) };
+  }
+
+  return null;
+}
+
 function getStatusInfo(params: {
   isFuture: boolean;
   isHoliday: boolean;
@@ -334,8 +367,10 @@ function getStatusInfo(params: {
 }) {
   const { isFuture, isHoliday, leaveRequest, hasAttendance, correctionRequest } = params;
 
+  const leaveStatus = getLeaveRequestStatusInfo(leaveRequest);
+
   if (isFuture) {
-    return { label: "", type: "none" as const };
+    return leaveStatus ?? { label: "", type: "none" as const };
   }
 
   if (correctionRequest?.approval_status === APPROVAL_STATUS.pending) {
@@ -355,21 +390,8 @@ function getStatusInfo(params: {
     return { label, type: getStatusTypeFromLabel(label) };
   }
 
-  if (leaveRequest?.approval_status === APPROVAL_STATUS.pending) {
-    return { label: "休暇申請中", type: "leavePending" as const };
-  }
-
-  if (leaveRequest?.approval_status === APPROVAL_STATUS.rejected) {
-    return { label: "休暇申請却下", type: "leaveRejected" as const };
-  }
-
-  if (leaveRequest?.approval_status === APPROVAL_STATUS.canceled) {
-    return { label: "休暇申請取消", type: "leaveCanceled" as const };
-  }
-
-  if (leaveRequest?.approval_status === APPROVAL_STATUS.approved) {
-    const label = getLeaveTypeLabel(leaveRequest.leave_type);
-    return { label, type: getStatusTypeFromLabel(label) };
+  if (leaveStatus) {
+    return leaveStatus;
   }
 
   if (isHoliday) {
@@ -510,7 +532,8 @@ export default function AttendanceClient() {
     work_date: "",
     start_time: "",
     end_time: "",
-    away_duration: "",
+    away_hours: "",
+    away_minutes: "",
     status_label: "出勤",
     comment: "",
   });
@@ -691,7 +714,8 @@ export default function AttendanceClient() {
       work_date: row.dateKey,
       start_time: row.startTime ? row.startTime.slice(0, 5) : "",
       end_time: row.endTime ? row.endTime.slice(0, 5) : "",
-      away_duration: formatDuration(row.awayMinutes ?? 0) === "-" ? "" : formatDuration(row.awayMinutes ?? 0),
+      away_hours: splitDurationToFields(row.awayMinutes).hours,
+      away_minutes: splitDurationToFields(row.awayMinutes).minutes,
       status_label: normalizeFormStatusLabel(row.statusLabel),
       comment: "",
     });
@@ -737,9 +761,9 @@ export default function AttendanceClient() {
         return;
       }
 
-      const awayMinutes = parseDurationToMinutes(editForm.away_duration);
+      const awayMinutes = parseDurationFieldsToMinutes(editForm.away_hours, editForm.away_minutes);
       if (awayMinutes == null) {
-        throw new Error("離席時間は hh:mm 形式で入力してください。");
+        throw new Error("離席時間は時間と分を半角数字で入力してください。分は0〜59で入力してください。");
       }
 
       const startMinutes = parseTimeToMinutes(editForm.start_time || null);
@@ -1003,15 +1027,37 @@ export default function AttendanceClient() {
 
                   <div className={styles.modalField}>
                     <label className={styles.modalLabel}>離席時間</label>
-                    <input
-                      type="text"
-                      value={editForm.away_duration}
-                      onChange={(event) =>
-                        setEditForm((current) => ({ ...current, away_duration: event.target.value }))
-                      }
-                      className={styles.modalInput}
-                      placeholder="00:00"
-                    />
+                    <div className={styles.durationInputRow}>
+                      <label className={styles.durationInputUnit}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          inputMode="numeric"
+                          value={editForm.away_hours}
+                          onChange={(event) =>
+                            setEditForm((current) => ({ ...current, away_hours: event.target.value }))
+                          }
+                          className={`${styles.modalInput} ${styles.durationInput}`}
+                        />
+                        <span>時間</span>
+                      </label>
+                      <label className={styles.durationInputUnit}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          step="1"
+                          inputMode="numeric"
+                          value={editForm.away_minutes}
+                          onChange={(event) =>
+                            setEditForm((current) => ({ ...current, away_minutes: event.target.value }))
+                          }
+                          className={`${styles.modalInput} ${styles.durationInput}`}
+                        />
+                        <span>分</span>
+                      </label>
+                    </div>
                   </div>
                 </>
               )}

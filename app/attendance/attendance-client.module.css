@@ -491,3 +491,22 @@
   color: #666;
   line-height: 1.7;
 }
+.durationInputRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.durationInputUnit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+}
+
+.durationInput {
+  width: 96px;
+}
