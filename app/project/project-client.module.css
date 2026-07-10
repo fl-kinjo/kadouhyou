@@ -12,6 +12,8 @@
 
 .pageTitle {
   margin: 0;
+  font-size: 20px;
+  font-weight: 900;
 }
 
 .pageHeaderLinks {
@@ -73,6 +75,10 @@
 
 .searchRow {
   margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
 }
 
 .checkboxLabel {
@@ -82,15 +88,18 @@
 }
 
 .paginationBar {
-  margin-top: 12px;
+  position: relative;
+  margin-top: 16px;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  min-height: 40px;
 }
 
 .paginationInfo {
+  position: absolute;
+  left: 0;
   color: #555;
   font-size: 14px;
 }
@@ -98,6 +107,7 @@
 .paginationControls {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -215,12 +225,23 @@
     width: 100%;
   }
 
+  .searchRow {
+    gap: 12px;
+  }
+
   .paginationBar {
+    position: static;
+    flex-direction: column;
     align-items: stretch;
   }
 
+  .paginationInfo {
+    position: static;
+    text-align: center;
+  }
+
   .paginationControls {
-    justify-content: space-between;
+    justify-content: center;
     width: 100%;
   }
 }

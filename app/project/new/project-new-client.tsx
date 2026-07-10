@@ -43,6 +43,18 @@ type DriveFolder = {
 
 type PickerTarget = "estimate" | "invoice";
 
+type SearchableOption = {
+  value: string;
+  label: string;
+  disabled?: boolean;
+};
+
+type MemberFormRow = {
+  key: string;
+  profile_id: string;
+  revenue_share: string;
+};
+
 type GoogleTokenResponse = {
   access_token: string;
   error?: string;
@@ -124,6 +136,7 @@ const PROJECT_STATUS_OPTIONS = [
 ] as const;
 
 const GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const PERCENT_OPTIONS = Array.from({ length: 101 }, (_, index) => index);
 
 function fullName(lastName?: string | null, firstName?: string | null) {
   const name = `${lastName ?? ""}${firstName ?? ""}`.trim();
@@ -134,6 +147,10 @@ function optionLabel(profile: Profile) {
   const name = fullName(profile.last_name, profile.first_name);
   const email = (profile.email ?? "").trim();
   return email ? `${name}（${email}）` : name;
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/\s+/g, "");
 }
 
 function uniq<T>(items: T[]) {
@@ -160,6 +177,71 @@ function buildFileUrl(fileId: string) {
   return `https://drive.google.com/file/d/${fileId}/view`;
 }
 
+
+type SearchableSelectProps = {
+  value: string;
+  onChange: (value: string) => void;
+  options: SearchableOption[];
+  placeholder: string;
+  searchPlaceholder: string;
+  selectClassName?: string;
+  disabled?: boolean;
+};
+
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  selectClassName,
+  disabled = false,
+}: SearchableSelectProps) {
+  const [keyword, setKeyword] = useState("");
+  const normalizedKeyword = normalizeSearchText(keyword);
+
+  const filteredOptions = useMemo(() => {
+    if (!normalizedKeyword) return options;
+
+    return options.filter(
+      (option) =>
+        option.value === value ||
+        normalizeSearchText(option.label).includes(normalizedKeyword),
+    );
+  }, [normalizedKeyword, options, value]);
+
+  return (
+    <div className={styles.searchableSelect}>
+      <input
+        value={keyword}
+        onChange={(event) => setKeyword(event.target.value)}
+        className={styles.searchInput}
+        placeholder={searchPlaceholder}
+        disabled={disabled}
+      />
+      <select
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setKeyword("");
+        }}
+        className={selectClassName ?? styles.select}
+        disabled={disabled}
+      >
+        <option value="">{placeholder}</option>
+        {filteredOptions.map((option) => (
+          <option key={option.value} value={option.value} disabled={option.disabled}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {normalizedKeyword && filteredOptions.length === 0 && (
+        <p className={styles.searchEmptyText}>一致する候補がありません。</p>
+      )}
+    </div>
+  );
+}
+
 export default function ProjectNewClient() {
   const supabase = createClient();
   const router = useRouter();
@@ -177,9 +259,10 @@ export default function ProjectNewClient() {
   const [endDate, setEndDate] = useState("");
   const [projectManagerId, setProjectManagerId] = useState("");
   const [salesProfileId, setSalesProfileId] = useState("");
-  const [memberProfileIds, setMemberProfileIds] = useState<string[]>([""]);
-  const [pmRevenueShare, setPmRevenueShare] = useState("");
-  const [memberRevenueShare, setMemberRevenueShare] = useState("");
+  const [memberRows, setMemberRows] = useState<MemberFormRow[]>([
+    { key: "member-1", profile_id: "", revenue_share: "0" },
+  ]);
+  const [pmRevenueShare, setPmRevenueShare] = useState("0");
   const [status, setStatus] = useState("0");
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [invoiceMonth, setInvoiceMonth] = useState("");
@@ -192,7 +275,9 @@ export default function ProjectNewClient() {
   const [gisReady, setGisReady] = useState(false);
 
   const [driveModalOpen, setDriveModalOpen] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState<DriveFolder | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<DriveFolder | null>(
+    null,
+  );
   const [parentFolder, setParentFolder] = useState<DriveFolder | null>(null);
   const [folderNameInput, setFolderNameInput] = useState("");
   const [driveActionLoading, setDriveActionLoading] = useState(false);
@@ -201,7 +286,37 @@ export default function ProjectNewClient() {
   const accessTokenRef = useRef("");
   const pickerTargetRef = useRef<PickerTarget | null>(null);
 
-  const usedMemberIds = useMemo(() => new Set(memberProfileIds.filter(Boolean)), [memberProfileIds]);
+  const usedMemberIds = useMemo(
+    () => new Set(memberRows.map((row) => row.profile_id).filter(Boolean)),
+    [memberRows],
+  );
+
+  const clientOptions = useMemo<SearchableOption[]>(
+    () =>
+      clients.map((client) => ({
+        value: client.id,
+        label: `${client.name}${client.is_focus === 1 ? " ★" : ""}`,
+      })),
+    [clients],
+  );
+
+  const profileOptions = useMemo<SearchableOption[]>(
+    () =>
+      profiles.map((profile) => ({
+        value: profile.id,
+        label: optionLabel(profile),
+      })),
+    [profiles],
+  );
+
+  const salesProfileOptions = useMemo<SearchableOption[]>(
+    () =>
+      salesProfiles.map((profile) => ({
+        value: profile.id,
+        label: optionLabel(profile),
+      })),
+    [salesProfiles],
+  );
 
   const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY ?? "";
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
@@ -240,15 +355,23 @@ export default function ProjectNewClient() {
 
         const nextClients = (clientData ?? []) as Client[];
         const nextProfiles = ((profileData ?? []) as Profile[]).filter(
-          (profile) => `${profile.last_name ?? ""}${profile.first_name ?? ""}`.trim() !== ""
+          (profile) =>
+            `${profile.last_name ?? ""}${profile.first_name ?? ""}`.trim() !==
+            "",
         );
         const profileJobs = (profileJobData ?? []) as ProfileJob[];
         const jobs = (jobData ?? []) as Job[];
-        const salesJobIds = new Set(jobs.filter((job) => job.name === "営業").map((job) => job.id));
-        const salesProfileIds = new Set(
-          profileJobs.filter((profileJob) => salesJobIds.has(profileJob.job_id)).map((profileJob) => profileJob.profile_id)
+        const salesJobIds = new Set(
+          jobs.filter((job) => job.name === "営業").map((job) => job.id),
         );
-        const nextSalesProfiles = nextProfiles.filter((profile) => salesProfileIds.has(profile.id));
+        const salesProfileIds = new Set(
+          profileJobs
+            .filter((profileJob) => salesJobIds.has(profileJob.job_id))
+            .map((profileJob) => profileJob.profile_id),
+        );
+        const nextSalesProfiles = nextProfiles.filter((profile) =>
+          salesProfileIds.has(profile.id),
+        );
 
         setClients(nextClients);
         setProfiles(nextProfiles);
@@ -300,81 +423,136 @@ export default function ProjectNewClient() {
       document.body.appendChild(script);
     };
 
-    appendScript("https://apis.google.com/js/api.js", "google-api-script", () => {
-      if (!window.gapi?.load) {
-        setMsg("Google API script は読み込まれましたが、Picker 初期化に失敗しました。");
-        return;
-      }
+    appendScript(
+      "https://apis.google.com/js/api.js",
+      "google-api-script",
+      () => {
+        if (!window.gapi?.load) {
+          setMsg(
+            "Google API script は読み込まれましたが、Picker 初期化に失敗しました。",
+          );
+          return;
+        }
 
-      window.gapi.load("picker", {
-        callback: () => {
-          setPickerReady(true);
-        },
-      });
-    });
+        window.gapi.load("picker", {
+          callback: () => {
+            setPickerReady(true);
+          },
+        });
+      },
+    );
 
-    appendScript("https://accounts.google.com/gsi/client", "google-gis-script", () => {
-      if (!window.google?.accounts?.oauth2) {
-        setMsg("Google GIS script は読み込まれましたが、OAuth 初期化に失敗しました。");
-        return;
-      }
+    appendScript(
+      "https://accounts.google.com/gsi/client",
+      "google-gis-script",
+      () => {
+        if (!window.google?.accounts?.oauth2) {
+          setMsg(
+            "Google GIS script は読み込まれましたが、OAuth 初期化に失敗しました。",
+          );
+          return;
+        }
 
-      tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
-        client_id: googleClientId,
-        scope: GOOGLE_SCOPE,
-        callback: (response: GoogleTokenResponse) => {
-          if (response.error) {
-            setMsg(`Google認証に失敗しました: ${response.error}`);
-            setPickerLoading(false);
-            setDriveActionLoading(false);
-            return;
-          }
+        tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: GOOGLE_SCOPE,
+          callback: (response: GoogleTokenResponse) => {
+            if (response.error) {
+              setMsg(`Google認証に失敗しました: ${response.error}`);
+              setPickerLoading(false);
+              setDriveActionLoading(false);
+              return;
+            }
 
-          accessTokenRef.current = response.access_token;
-        },
-      });
+            accessTokenRef.current = response.access_token;
+          },
+        });
 
-      setGisReady(true);
-    });
+        setGisReady(true);
+      },
+    );
   }, [googleApiKey, googleClientId, googleAppId]);
 
-  const addMemberRow = () => setMemberProfileIds((current) => [...current, ""]);
-
-  const removeMemberRow = (index: number) => {
-    setMemberProfileIds((current) => (current.length <= 1 ? current : current.filter((_, idx) => idx !== index)));
+  const addMemberRow = () => {
+    setMemberRows((current) => [
+      ...current,
+      {
+        key: `member-${Date.now()}-${current.length}`,
+        profile_id: "",
+        revenue_share: "0",
+      },
+    ]);
   };
 
-  const setMemberAt = (index: number, value: string) => {
-    setMemberProfileIds((current) => current.map((item, idx) => (idx === index ? value : item)));
+  const removeMemberRow = (index: number) => {
+    setMemberRows((current) =>
+      current.length <= 1 ? current : current.filter((_, idx) => idx !== index),
+    );
+  };
+
+  const setMemberProfileAt = (index: number, value: string) => {
+    setMemberRows((current) =>
+      current.map((item, idx) =>
+        idx === index ? { ...item, profile_id: value } : item,
+      ),
+    );
+  };
+
+  const setMemberRevenueShareAt = (index: number, value: string) => {
+    setMemberRows((current) =>
+      current.map((item, idx) =>
+        idx === index ? { ...item, revenue_share: value } : item,
+      ),
+    );
+  };
+
+  const getMemberRevenueShareTotal = () => {
+    return memberRows.reduce(
+      (total, row) => total + (toNumberOrNull(row.revenue_share) ?? 0),
+      0,
+    );
   };
 
   const validate = () => {
     if (!clientId) return "クライアントを選択してください。";
     if (!name.trim()) return "案件名を入力してください。";
-    if (startDate && endDate && startDate > endDate) return "開始日が終了日より後になっています。";
+    if (startDate && endDate && startDate > endDate)
+      return "開始日が終了日より後になっています。";
 
-    const normalizedMemberIds = memberProfileIds.map((item) => item.trim()).filter(Boolean);
-    if (normalizedMemberIds.length !== uniq(normalizedMemberIds).length) return "案件メンバーが重複しています。";
+    const normalizedMemberIds = memberRows
+      .map((item) => item.profile_id.trim())
+      .filter(Boolean);
+    if (normalizedMemberIds.length !== uniq(normalizedMemberIds).length)
+      return "案件メンバーが重複しています。";
 
-    const pmRevenueShareNum = toNumberOrNull(pmRevenueShare);
-    if (pmRevenueShare.trim() && (pmRevenueShareNum == null || pmRevenueShareNum < 0 || pmRevenueShareNum > 100)) {
-      return "PM売上比率は 0〜100 の数値で入力してください。";
+    const pmRevenueShareNum = toNumberOrNull(pmRevenueShare) ?? 0;
+    if (pmRevenueShareNum < 0 || pmRevenueShareNum > 100) {
+      return "PM売上比率は 0〜100 から選択してください。";
+    }
+    if (pmRevenueShareNum > 0 && !projectManagerId) {
+      return "PM売上比率を設定する場合は、案件責任者を選択してください。";
     }
 
-    const memberRevenueShareNum = toNumberOrNull(memberRevenueShare);
-    if (
-      memberRevenueShare.trim() &&
-      (memberRevenueShareNum == null || memberRevenueShareNum < 0 || memberRevenueShareNum > 100)
-    ) {
-      return "メンバー売上比率は 0〜100 の数値で入力してください。";
+    for (const [index, row] of memberRows.entries()) {
+      const memberRevenueShareNum = toNumberOrNull(row.revenue_share) ?? 0;
+      if (memberRevenueShareNum < 0 || memberRevenueShareNum > 100) {
+        return `メンバー${index + 1}の売上比率は 0〜100 から選択してください。`;
+      }
+      if (memberRevenueShareNum > 0 && !row.profile_id.trim()) {
+        return `メンバー${index + 1}の売上比率を設定する場合は、案件メンバーを選択してください。`;
+      }
     }
 
-    if ((pmRevenueShareNum ?? 0) + (memberRevenueShareNum ?? 0) > 100) {
-      return "PM売上比率とメンバー売上比率の合計は100以下にしてください。";
+    const revenueShareTotal = pmRevenueShareNum + getMemberRevenueShareTotal();
+    if (revenueShareTotal !== 100) {
+      return `PM売上比率と各メンバー売上比率の合計は100%にしてください。現在は${revenueShareTotal}%です。`;
     }
 
     const invoiceAmountNum = toNumberOrNull(invoiceAmount);
-    if (invoiceAmount.trim() && (invoiceAmountNum == null || invoiceAmountNum < 0)) {
+    if (
+      invoiceAmount.trim() &&
+      (invoiceAmountNum == null || invoiceAmountNum < 0)
+    ) {
       return "請求額は0以上の数値で入力してください。";
     }
 
@@ -386,7 +564,10 @@ export default function ProjectNewClient() {
     if (authError) throw new Error(authError.message);
 
     const authUserId = authData.user?.id;
-    if (!authUserId) throw new Error("ログインユーザーを取得できません。再ログインしてください。");
+    if (!authUserId)
+      throw new Error(
+        "ログインユーザーを取得できません。再ログインしてください。",
+      );
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles_2")
@@ -406,7 +587,9 @@ export default function ProjectNewClient() {
     }
 
     if (!pickerReady || !gisReady || !tokenClientRef.current) {
-      throw new Error("Google Picker の初期化がまだ完了していません。ページ再読み込み後に数秒待ってから再度お試しください。");
+      throw new Error(
+        "Google Picker の初期化がまだ完了していません。ページ再読み込み後に数秒待ってから再度お試しください。",
+      );
     }
 
     if (accessTokenRef.current) return accessTokenRef.current;
@@ -417,18 +600,20 @@ export default function ProjectNewClient() {
         return;
       }
 
-      tokenClientRef.current = window.google!.accounts!.oauth2!.initTokenClient({
-        client_id: googleClientId,
-        scope: GOOGLE_SCOPE,
-        callback: (response: GoogleTokenResponse) => {
-          if (response.error) {
-            reject(new Error(`Google認証に失敗しました: ${response.error}`));
-            return;
-          }
-          accessTokenRef.current = response.access_token;
-          resolve(response.access_token);
+      tokenClientRef.current = window.google!.accounts!.oauth2!.initTokenClient(
+        {
+          client_id: googleClientId,
+          scope: GOOGLE_SCOPE,
+          callback: (response: GoogleTokenResponse) => {
+            if (response.error) {
+              reject(new Error(`Google認証に失敗しました: ${response.error}`));
+              return;
+            }
+            accessTokenRef.current = response.access_token;
+            resolve(response.access_token);
+          },
         },
-      });
+      );
 
       tokenClientRef.current.requestAccessToken({
         prompt: accessTokenRef.current ? "" : "consent",
@@ -457,11 +642,15 @@ export default function ProjectNewClient() {
       return;
     }
 
-    const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+    const docsView = new window.google.picker.DocsView(
+      window.google.picker.ViewId.DOCS,
+    )
       .setIncludeFolders(true)
       .setParent(folder.id);
 
-    const uploadView = new window.google.picker.DocsUploadView().setParent(folder.id);
+    const uploadView = new window.google.picker.DocsUploadView().setParent(
+      folder.id,
+    );
 
     const picker = new window.google.picker.PickerBuilder()
       .setAppId(googleAppId)
@@ -514,7 +703,9 @@ export default function ProjectNewClient() {
         throw new Error("Google Picker の初期化に失敗しました。");
       }
 
-      const folderView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+      const folderView = new window.google.picker.DocsView(
+        window.google.picker.ViewId.DOCS,
+      )
         .setIncludeFolders(true)
         .setSelectFolderEnabled(true);
 
@@ -522,7 +713,9 @@ export default function ProjectNewClient() {
         .setAppId(googleAppId)
         .setOAuthToken(accessTokenRef.current)
         .setDeveloperKey(googleApiKey)
-        .setTitle(mode === "existing" ? "既存フォルダを選択" : "親フォルダを選択")
+        .setTitle(
+          mode === "existing" ? "既存フォルダを選択" : "親フォルダを選択",
+        )
         .addView(folderView)
         .setCallback((data: any) => {
           const action = data[window.google!.picker!.Response.ACTION];
@@ -581,25 +774,32 @@ export default function ProjectNewClient() {
 
       const token = await ensureGoogleReady();
 
-      const response = await fetch("https://www.googleapis.com/drive/v3/files", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const response = await fetch(
+        "https://www.googleapis.com/drive/v3/files",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: folderName,
+            mimeType: "application/vnd.google-apps.folder",
+            parents: [parentFolder.id],
+          }),
         },
-        body: JSON.stringify({
-          name: folderName,
-          mimeType: "application/vnd.google-apps.folder",
-          parents: [parentFolder.id],
-        }),
-      });
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`フォルダ作成に失敗しました: ${errorText}`);
       }
 
-      const data = (await response.json()) as { id: string; name?: string; webViewLink?: string };
+      const data = (await response.json()) as {
+        id: string;
+        name?: string;
+        webViewLink?: string;
+      };
 
       const folder: DriveFolder = {
         id: data.id,
@@ -621,7 +821,9 @@ export default function ProjectNewClient() {
     pickerTargetRef.current = target;
     setSelectedFolder(null);
     setParentFolder(null);
-    setFolderNameInput(`${name.trim() || "案件"}_${target === "estimate" ? "見積" : "請求書"}`);
+    setFolderNameInput(
+      `${name.trim() || "案件"}_${target === "estimate" ? "見積" : "請求書"}`,
+    );
     setDriveModalOpen(true);
   };
 
@@ -638,6 +840,7 @@ export default function ProjectNewClient() {
     try {
       const updaterId = await getCurrentUpdaterId();
       const invoiceAmountNum = toNumberOrNull(invoiceAmount);
+      const memberRevenueShareTotal = getMemberRevenueShareTotal();
 
       const { data: project, error: projectError } = await supabase
         .from("project")
@@ -649,7 +852,7 @@ export default function ProjectNewClient() {
           project_manager_id: projectManagerId || null,
           sales_profile_id: salesProfileId || updaterId,
           pm_revenue_share: toNumberOrNull(pmRevenueShare),
-          member_revenue_share: toNumberOrNull(memberRevenueShare),
+          member_revenue_share: memberRevenueShareTotal,
           status: Number(status),
           invoice_amount: invoiceAmountNum,
           invoice_month: monthValueToDate(invoiceMonth),
@@ -664,15 +867,24 @@ export default function ProjectNewClient() {
       if (projectError) throw new Error(projectError.message);
       if (!project?.id) throw new Error("案件IDが取得できませんでした。");
 
-      const normalizedMemberIds = uniq(memberProfileIds.map((item) => item.trim()).filter(Boolean));
-      if (normalizedMemberIds.length > 0) {
-        const memberPayload = normalizedMemberIds.map((profileId) => ({
+      const normalizedMemberRows = memberRows
+        .map((row) => ({
+          profile_id: row.profile_id.trim(),
+          revenue_share: toNumberOrNull(row.revenue_share) ?? 0,
+        }))
+        .filter((row) => row.profile_id);
+
+      if (normalizedMemberRows.length > 0) {
+        const memberPayload = normalizedMemberRows.map((row) => ({
           project_id: project.id,
-          profile_id: profileId,
+          profile_id: row.profile_id,
+          revenue_share: row.revenue_share,
           updated_by: updaterId,
         }));
 
-        const { error: memberError } = await supabase.from("project_member").insert(memberPayload);
+        const { error: memberError } = await supabase
+          .from("project_member")
+          .insert(memberPayload);
         if (memberError) throw new Error(memberError.message);
       }
 
@@ -687,152 +899,189 @@ export default function ProjectNewClient() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>案件登録</h1>
-        <button type="button" onClick={() => router.push("/project")} className={styles.btnGhost}>
-          一覧へ戻る
+      <div className={styles.backRow}>
+        <button
+          type="button"
+          onClick={() => router.push("/project")}
+          className={styles.backButton}
+        >
+          <span className={styles.backIcon} aria-hidden="true" />
+          <span>戻る</span>
         </button>
       </div>
+
+      <div className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>案件登録画面</h1>
+      </div>
+      <div className={styles.topBorder} />
 
       <div className={styles.card}>
         {loading ? (
           <p className={styles.emptyText}>読み込み中...</p>
         ) : (
           <>
-            <p className={styles.emptyText}>
-              Google Picker: {pickerReady ? "ready" : "loading"} / Google OAuth: {gisReady ? "ready" : "loading"}
-            </p>
+            <div className={styles.formActionTop}>
+              <button
+                type="button"
+                onClick={submit}
+                className={styles.btnPrimary}
+                disabled={saving}
+              >
+                {saving ? "登録中..." : "登録する"}
+              </button>
+            </div>
+
+            <div className={styles.gridRow}>
+              <div className={styles.gridLabel}>クライアント名</div>
+              <SearchableSelect
+                value={clientId}
+                onChange={setClientId}
+                options={clientOptions}
+                placeholder="選択してください"
+                searchPlaceholder="クライアント名で検索"
+                selectClassName={styles.select}
+              />
+            </div>
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>案件名</div>
-              <input value={name} onChange={(e) => setName(e.target.value)} className={styles.input} />
-            </div>
-
-            <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>クライアント</div>
-              <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={styles.select}>
-                <option value="">選択してください</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                    {client.is_focus === 1 ? " ★" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>開始日</div>
               <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className={styles.inputSmall}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={styles.input}
               />
             </div>
 
             <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>終了日</div>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className={styles.inputSmall}
-              />
-            </div>
-
-            <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>案件責任者</div>
-              <select
-                value={projectManagerId}
-                onChange={(e) => setProjectManagerId(e.target.value)}
-                className={styles.select}
-              >
-                <option value="">選択してください</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {optionLabel(profile)}
-                  </option>
-                ))}
-              </select>
+              <div className={styles.gridLabel}>期間</div>
+              <div className={styles.dateRangeRow}>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={styles.inputDate}
+                />
+                <span>〜</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className={styles.inputDate}
+                />
+              </div>
             </div>
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>担当営業</div>
-              <select
+              <SearchableSelect
                 value={salesProfileId}
-                onChange={(e) => setSalesProfileId(e.target.value)}
-                className={styles.select}
-              >
-                <option value="">なし（自分を担当営業にする）</option>
-                {salesProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {optionLabel(profile)}
-                  </option>
-                ))}
-              </select>
+                onChange={setSalesProfileId}
+                options={salesProfileOptions}
+                placeholder="なし（自分を担当営業にする）"
+                searchPlaceholder="担当営業を検索"
+                selectClassName={styles.select}
+              />
             </div>
 
             <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>案件メンバー</div>
+              <div className={styles.gridLabel}>PM</div>
+              <div className={styles.personShareRow}>
+                <SearchableSelect
+                  value={projectManagerId}
+                  onChange={setProjectManagerId}
+                  options={profileOptions}
+                  placeholder="選択してください"
+                  searchPlaceholder="PMを検索"
+                  selectClassName={styles.personSelect}
+                />
+                <span className={styles.shareLabel}>売上比率</span>
+                <select
+                  value={pmRevenueShare}
+                  onChange={(e) => setPmRevenueShare(e.target.value)}
+                  className={styles.percentSelect}
+                >
+                  {PERCENT_OPTIONS.map((value) => (
+                    <option key={value} value={String(value)}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+                <span>%</span>
+              </div>
+            </div>
+
+            <div className={styles.gridRow}>
+              <div className={styles.gridLabel}>ディレクター</div>
               <div className={styles.directorWrap}>
-                {memberProfileIds.map((profileId, index) => (
-                  <div key={`member-${index}`} className={styles.directorRow}>
-                    <select value={profileId} onChange={(e) => setMemberAt(index, e.target.value)} className={styles.select}>
-                      <option value="">選択してください</option>
-                      {profiles.map((profile) => {
-                        const alreadyUsed = usedMemberIds.has(profile.id) && profile.id !== profileId;
-                        return (
-                          <option key={profile.id} value={profile.id} disabled={alreadyUsed}>
-                            {optionLabel(profile)}
+                {memberRows.map((row, index) => {
+                  const memberOptions = profileOptions.map((option) => ({
+                    ...option,
+                    disabled:
+                      usedMemberIds.has(option.value) &&
+                      option.value !== row.profile_id,
+                  }));
+
+                  return (
+                    <div key={row.key} className={styles.personShareRow}>
+                      <SearchableSelect
+                        value={row.profile_id}
+                        onChange={(value) => setMemberProfileAt(index, value)}
+                        options={memberOptions}
+                        placeholder="選択してください"
+                        searchPlaceholder="ディレクターを検索"
+                        selectClassName={styles.personSelect}
+                      />
+                      <span className={styles.shareLabel}>売上比率</span>
+                      <select
+                        value={row.revenue_share}
+                        onChange={(e) =>
+                          setMemberRevenueShareAt(index, e.target.value)
+                        }
+                        className={styles.percentSelect}
+                      >
+                        {PERCENT_OPTIONS.map((value) => (
+                          <option key={value} value={String(value)}>
+                            {value}
                           </option>
-                        );
-                      })}
-                    </select>
-                    {index > 0 && (
-                      <button type="button" onClick={() => removeMemberRow(index)} className={styles.btnMini}>
-                        削除
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button type="button" onClick={addMemberRow} className={styles.btnLink}>
-                  ＋ メンバーを追加
+                        ))}
+                      </select>
+                      <span>%</span>
+                      {index > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => removeMemberRow(index)}
+                          className={styles.btnMini}
+                        >
+                          削除
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={addMemberRow}
+                  className={styles.btnLink}
+                >
+                  ＋ ディレクターを追加
                 </button>
               </div>
             </div>
 
-            <hr className={styles.hr} />
-
-            <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>PM売上比率</div>
-              <div className={styles.percentRow}>
-                <input
-                  value={pmRevenueShare}
-                  onChange={(e) => setPmRevenueShare(e.target.value)}
-                  className={styles.inputSmall}
-                  inputMode="decimal"
-                />
-                <span>%</span>
-              </div>
+            <div className={styles.revenueShareSummary}>
+              売上比率合計：
+              {(toNumberOrNull(pmRevenueShare) ?? 0) +
+                getMemberRevenueShareTotal()}
+              % / 100%
             </div>
 
             <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>メンバー売上比率</div>
-              <div className={styles.percentRow}>
-                <input
-                  value={memberRevenueShare}
-                  onChange={(e) => setMemberRevenueShare(e.target.value)}
-                  className={styles.inputSmall}
-                  inputMode="decimal"
-                />
-                <span>%</span>
-              </div>
-            </div>
-
-            <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>ステータス</div>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className={styles.select}>
+              <div className={styles.gridLabel}>状態</div>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className={styles.select}
+              >
                 {PROJECT_STATUS_OPTIONS.map((option) => (
                   <option key={option.value} value={String(option.value)}>
                     {option.label}
@@ -843,13 +1092,16 @@ export default function ProjectNewClient() {
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>請求額</div>
-              <input
-                value={invoiceAmount}
-                onChange={(e) => setInvoiceAmount(e.target.value)}
-                className={styles.inputSmall}
-                inputMode="numeric"
-                placeholder="円単位"
-              />
+              <div className={styles.yenRow}>
+                <span>¥</span>
+                <input
+                  value={invoiceAmount}
+                  onChange={(e) => setInvoiceAmount(e.target.value)}
+                  className={styles.inputSmall}
+                  inputMode="numeric"
+                  placeholder="円単位"
+                />
+              </div>
             </div>
 
             <div className={styles.gridRow}>
@@ -863,7 +1115,7 @@ export default function ProjectNewClient() {
             </div>
 
             <div className={styles.gridRow}>
-              <div className={styles.gridLabel}>入金予定日</div>
+              <div className={styles.gridLabel}>支払期日</div>
               <input
                 type="date"
                 value={paymentDueDate}
@@ -874,44 +1126,58 @@ export default function ProjectNewClient() {
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>見積リンク</div>
-              <div className={styles.linkFieldWrap}>
-                <input value={estimate} onChange={(e) => setEstimate(e.target.value)} className={styles.input} />
-                <button
-                  type="button"
-                  onClick={() => openDriveFlow("estimate")}
-                  className={styles.btnDrive}
-                  disabled={pickerLoading || driveActionLoading}
-                >
-                  {pickerLoading && pickerTargetRef.current === "estimate" ? "読み込み中..." : "Driveから選択"}
-                </button>
+              <div>
+                <div className={styles.linkFieldWrap}>
+                  <input
+                    value={estimate}
+                    onChange={(e) => setEstimate(e.target.value)}
+                    className={`${styles.input} ${styles.linkInput}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openDriveFlow("estimate")}
+                    className={styles.btnDrive}
+                    disabled={pickerLoading || driveActionLoading}
+                  >
+                    {pickerLoading && pickerTargetRef.current === "estimate"
+                      ? "読み込み中..."
+                      : "Driveから選択"}
+                  </button>
+                </div>
+                {pickerTargetRef.current === "estimate" && selectedFolder && (
+                  <p className={styles.emptyText}>
+                    保存先フォルダ: {selectedFolder.name}
+                  </p>
+                )}
               </div>
-              {pickerTargetRef.current === "estimate" && selectedFolder && (
-                <p className={styles.emptyText}>保存先フォルダ: {selectedFolder.name}</p>
-              )}
             </div>
 
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>請求書リンク</div>
-              <div className={styles.linkFieldWrap}>
-                <input value={invoice} onChange={(e) => setInvoice(e.target.value)} className={styles.input} />
-                <button
-                  type="button"
-                  onClick={() => openDriveFlow("invoice")}
-                  className={styles.btnDrive}
-                  disabled={pickerLoading || driveActionLoading}
-                >
-                  {pickerLoading && pickerTargetRef.current === "invoice" ? "読み込み中..." : "Driveから選択"}
-                </button>
+              <div>
+                <div className={styles.linkFieldWrap}>
+                  <input
+                    value={invoice}
+                    onChange={(e) => setInvoice(e.target.value)}
+                    className={`${styles.input} ${styles.linkInput}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openDriveFlow("invoice")}
+                    className={styles.btnDrive}
+                    disabled={pickerLoading || driveActionLoading}
+                  >
+                    {pickerLoading && pickerTargetRef.current === "invoice"
+                      ? "読み込み中..."
+                      : "Driveから選択"}
+                  </button>
+                </div>
+                {pickerTargetRef.current === "invoice" && selectedFolder && (
+                  <p className={styles.emptyText}>
+                    保存先フォルダ: {selectedFolder.name}
+                  </p>
+                )}
               </div>
-              {pickerTargetRef.current === "invoice" && selectedFolder && (
-                <p className={styles.emptyText}>保存先フォルダ: {selectedFolder.name}</p>
-              )}
-            </div>
-
-            <div className={styles.buttonRow}>
-              <button type="button" onClick={submit} className={styles.btnPrimary} disabled={saving}>
-                {saving ? "登録中..." : "登録"}
-              </button>
             </div>
 
             {msg && <p className={styles.errorText}>{msg}</p>}
@@ -920,11 +1186,18 @@ export default function ProjectNewClient() {
       </div>
 
       {driveModalOpen && (
-        <div className={styles.modalOverlay} onClick={() => !driveActionLoading && setDriveModalOpen(false)}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+        <div
+          className={styles.modalOverlay}
+          onClick={() => !driveActionLoading && setDriveModalOpen(false)}
+        >
+          <div
+            className={styles.modalCard}
+            onClick={(event) => event.stopPropagation()}
+          >
             <h2 className={styles.modalTitle}>Drive 操作</h2>
             <p className={styles.emptyText}>
-              {pickerTargetRef.current === "estimate" ? "見積" : "請求書"} 用の保存先を選んでください。
+              {pickerTargetRef.current === "estimate" ? "見積" : "請求書"}{" "}
+              用の保存先を選んでください。
             </p>
 
             <div className={styles.modalSection}>
@@ -956,7 +1229,9 @@ export default function ProjectNewClient() {
                   親フォルダを選択
                 </button>
               </div>
-              {parentFolder && <p className={styles.emptyText}>選択中: {parentFolder.name}</p>}
+              {parentFolder && (
+                <p className={styles.emptyText}>選択中: {parentFolder.name}</p>
+              )}
 
               <div className={styles.gridLabel}>新規フォルダ名</div>
               <input

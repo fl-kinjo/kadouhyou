@@ -995,12 +995,6 @@ export default function EmployeeClient() {
         <h1 className={styles.pageTitle}>社員一覧</h1>
 
         <div className={styles.pageHeaderLinks}>
-          <Link href="/team" className={styles.headerLink}>
-            組織管理へ
-          </Link>
-          <Link href="/job" className={styles.headerLink}>
-            職種管理へ
-          </Link>
           {canManageEmployee && (
             <button type="button" onClick={openCreate} className={styles.btnRed} disabled={saving}>
               ＋ 新規社員登録

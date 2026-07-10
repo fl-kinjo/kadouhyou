@@ -275,9 +275,6 @@ export default function ProjectClient() {
       <div className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>案件一覧</h1>
         <div className={styles.pageHeaderLinks}>
-          <Link href="/project-request" className={styles.btnGhost}>
-            案件申請管理
-          </Link>
           <Link href="/project/new" className={styles.btnRed}>
             ＋ 案件登録
           </Link>
@@ -354,33 +351,6 @@ export default function ProjectClient() {
         </div>
       </div>
 
-      <div className={styles.paginationBar}>
-        <div className={styles.paginationInfo}>
-          {displayStart}〜{displayEnd}件 / 全{totalCount}件
-        </div>
-        <div className={styles.paginationControls}>
-          <button
-            type="button"
-            className={styles.paginationButton}
-            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-            disabled={currentPage <= 1}
-          >
-            前へ
-          </button>
-          <span className={styles.paginationPage}>
-            {currentPage} / {totalPages}
-          </span>
-          <button
-            type="button"
-            className={styles.paginationButton}
-            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-            disabled={currentPage >= totalPages}
-          >
-            次へ
-          </button>
-        </div>
-      </div>
-
       <div className={styles.tableFrame}>
         <div className={styles.tableScroll}>
           <table className={styles.table}>
@@ -433,6 +403,33 @@ export default function ProjectClient() {
           </table>
         </div>
       </div>
+      <div className={styles.paginationBar}>
+        <div className={styles.paginationInfo}>
+          {displayStart}〜{displayEnd}件 / 全{totalCount}件
+        </div>
+        <div className={styles.paginationControls}>
+          <button
+            type="button"
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage <= 1}
+          >
+            前へ
+          </button>
+          <span className={styles.paginationPage}>
+            {currentPage} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage >= totalPages}
+          >
+            次へ
+          </button>
+        </div>
+      </div>
+
     </main>
   );
 }

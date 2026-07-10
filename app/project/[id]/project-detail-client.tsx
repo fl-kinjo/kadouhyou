@@ -360,8 +360,9 @@ export default function ProjectDetailClient({ initialData }: { initialData: Init
   return (
     <main className={styles.page}>
       <div className={styles.backRow}>
-        <Link href="/project" className={styles.backLink}>
-          ← 戻る
+        <Link href="/project" className={styles.backLink} aria-label="案件一覧へ戻る">
+          <span className={styles.backIcon} aria-hidden="true" />
+          <span>戻る</span>
         </Link>
       </div>
 
