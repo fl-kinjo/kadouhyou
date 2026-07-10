@@ -173,6 +173,35 @@ function normalizeOperatingPersonMonths(value: string) {
   return value.trim();
 }
 
+const TEMP_EMAIL_PATTERN = /^spreadsheet-[^@\s]+@example\.invalid$/i;
+const PAGE_SIZE = 20;
+
+type EmployeeSortKey =
+  | "created_desc"
+  | "created_asc"
+  | "name_asc"
+  | "name_desc"
+  | "email_asc"
+  | "email_desc"
+  | "team_asc"
+  | "team_desc"
+  | "job_asc"
+  | "job_desc"
+  | "status_asc"
+  | "status_desc";
+
+function isTemporaryImportEmail(email: string | null | undefined) {
+  return TEMP_EMAIL_PATTERN.test((email ?? "").trim());
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/\s+/g, "");
+}
+
+function compareText(a: string, b: string) {
+  return a.localeCompare(b, "ja", { numeric: true, sensitivity: "base" });
+}
+
 export default function EmployeeClient() {
   const supabase = createClient();
 
@@ -207,6 +236,9 @@ export default function EmployeeClient() {
   const [formJobIds, setFormJobIds] = useState<string[]>([""]);
   const [formOperatingPersonMonths, setFormOperatingPersonMonths] = useState("1");
   const [visibleStatuses, setVisibleStatuses] = useState<number[]>([0]);
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [sortKey, setSortKey] = useState<EmployeeSortKey>("created_desc");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuTargetProfileId, setMenuTargetProfileId] = useState<string | null>(null);
@@ -339,7 +371,11 @@ export default function EmployeeClient() {
       setManMonths(nextManMonths);
 
       const hasUnregisteredUser = nextProfiles.some(
-        (profile) => normalizeStatusValue(profile.status) !== 2 && (isBlank(profile.last_name) || isBlank(profile.first_name))
+        (profile) =>
+          normalizeStatusValue(profile.status) !== 2 &&
+          !!(profile.email ?? "").trim() &&
+          !isTemporaryImportEmail(profile.email) &&
+          (isBlank(profile.last_name) || isBlank(profile.first_name))
       );
 
       if ((currentIsAdmin || currentIsGeneralAffairs) && hasUnregisteredUser) {
@@ -468,12 +504,83 @@ export default function EmployeeClient() {
       }));
   }, [canManageEmployee, jobs, leaderManagedProfileIds, profileJobs, profiles, profileTeams, teams, visibleStatuses]);
 
+  const filteredRows = useMemo(() => {
+    const normalizedKeyword = normalizeSearchText(searchKeyword);
+
+    return rows.filter((row) => {
+      if (!normalizedKeyword) return true;
+
+      const values = [
+        row.email,
+        row.last_name,
+        row.first_name,
+        fullName(row.last_name, row.first_name),
+        row.team_paths,
+        row.jobs,
+        statusValueToLabel(row.status),
+      ];
+
+      return values.some((value) => normalizeSearchText(value).includes(normalizedKeyword));
+    });
+  }, [rows, searchKeyword]);
+
+  const sortedRows = useMemo(() => {
+    const nextRows = [...filteredRows];
+
+    nextRows.sort((a, b) => {
+      switch (sortKey) {
+        case "created_asc":
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case "name_asc":
+          return compareText(fullName(a.last_name, a.first_name), fullName(b.last_name, b.first_name));
+        case "name_desc":
+          return compareText(fullName(b.last_name, b.first_name), fullName(a.last_name, a.first_name));
+        case "email_asc":
+          return compareText(a.email, b.email);
+        case "email_desc":
+          return compareText(b.email, a.email);
+        case "team_asc":
+          return compareText(a.team_paths, b.team_paths);
+        case "team_desc":
+          return compareText(b.team_paths, a.team_paths);
+        case "job_asc":
+          return compareText(a.jobs, b.jobs);
+        case "job_desc":
+          return compareText(b.jobs, a.jobs);
+        case "status_asc":
+          return a.status - b.status || compareText(fullName(a.last_name, a.first_name), fullName(b.last_name, b.first_name));
+        case "status_desc":
+          return b.status - a.status || compareText(fullName(a.last_name, a.first_name), fullName(b.last_name, b.first_name));
+        case "created_desc":
+        default:
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
+
+    return nextRows;
+  }, [filteredRows, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
+  const currentPageSafe = Math.min(currentPage, totalPages);
+  const pageStartIndex = (currentPageSafe - 1) * PAGE_SIZE;
+  const paginatedRows = sortedRows.slice(pageStartIndex, pageStartIndex + PAGE_SIZE);
+  const pageDisplayStart = sortedRows.length === 0 ? 0 : pageStartIndex + 1;
+  const pageDisplayEnd = Math.min(pageStartIndex + PAGE_SIZE, sortedRows.length);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+
   const unregisteredProfiles = useMemo(() => {
     return profiles
       .filter(
         (profile) =>
           normalizeStatusValue(profile.status) !== 2 &&
           !!(profile.email ?? "").trim() &&
+          !isTemporaryImportEmail(profile.email) &&
           (isBlank(profile.last_name) || isBlank(profile.first_name))
       )
       .map((profile) => ({
@@ -728,6 +835,7 @@ export default function EmployeeClient() {
     setVisibleStatuses((current) =>
       current.includes(status) ? current.filter((item) => item !== status) : [...current, status].sort()
     );
+    setCurrentPage(1);
   };
 
   const getSelectedProfileId = () => {
@@ -903,7 +1011,7 @@ export default function EmployeeClient() {
 
       <div className={styles.topBorder} />
 
-      {canManageEmployee && warningMsg && (
+      {canManageEmployee && warningMsg && unregisteredProfiles.length > 0 && (
         <details className={styles.warningBox}>
           <summary className={styles.warningSummary}>{warningMsg}</summary>
           <div className={styles.warningBody}>
@@ -921,32 +1029,81 @@ export default function EmployeeClient() {
       )}
       {errorMsg && <p className={styles.errorText}>{errorMsg}</p>}
 
-      <div className={styles.filterBar}>
-        <span className={styles.filterLabel}>在籍状況</span>
-        <label className={styles.checkboxLabel}>
+      <div className={styles.listControls}>
+        <div className={styles.searchControl}>
+          <label className={styles.filterLabel} htmlFor="employee-search">検索</label>
           <input
-            type="checkbox"
-            checked={visibleStatuses.includes(0)}
-            onChange={() => toggleVisibleStatus(0)}
+            id="employee-search"
+            value={searchKeyword}
+            onChange={(event) => {
+              setSearchKeyword(event.target.value);
+              setCurrentPage(1);
+            }}
+            className={styles.searchInput}
+            placeholder="氏名・メール・所属組織・職種で検索"
           />
-          <span>在籍中</span>
-        </label>
-        <label className={styles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={visibleStatuses.includes(1)}
-            onChange={() => toggleVisibleStatus(1)}
-          />
-          <span>休職中</span>
-        </label>
-        <label className={styles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={visibleStatuses.includes(2)}
-            onChange={() => toggleVisibleStatus(2)}
-          />
-          <span>離職済み</span>
-        </label>
+        </div>
+
+        <div className={styles.sortControl}>
+          <label className={styles.filterLabel} htmlFor="employee-sort">並べ替え</label>
+          <select
+            id="employee-sort"
+            value={sortKey}
+            onChange={(event) => {
+              setSortKey(event.target.value as EmployeeSortKey);
+              setCurrentPage(1);
+            }}
+            className={styles.sortSelect}
+          >
+            <option value="created_desc">登録日が新しい順</option>
+            <option value="created_asc">登録日が古い順</option>
+            <option value="name_asc">社員名 昇順</option>
+            <option value="name_desc">社員名 降順</option>
+            <option value="email_asc">メールアドレス 昇順</option>
+            <option value="email_desc">メールアドレス 降順</option>
+            <option value="team_asc">所属組織 昇順</option>
+            <option value="team_desc">所属組織 降順</option>
+            <option value="job_asc">職種 昇順</option>
+            <option value="job_desc">職種 降順</option>
+            <option value="status_asc">在籍状況 昇順</option>
+            <option value="status_desc">在籍状況 降順</option>
+          </select>
+        </div>
+
+        <div className={styles.filterBar}>
+          <span className={styles.filterLabel}>在籍状況</span>
+          <label className={styles.checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={visibleStatuses.includes(0)}
+              onChange={() => toggleVisibleStatus(0)}
+            />
+            <span>在籍中</span>
+          </label>
+          <label className={styles.checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={visibleStatuses.includes(1)}
+              onChange={() => toggleVisibleStatus(1)}
+            />
+            <span>休職中</span>
+          </label>
+          <label className={styles.checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={visibleStatuses.includes(2)}
+              onChange={() => toggleVisibleStatus(2)}
+            />
+            <span>離職済み</span>
+          </label>
+        </div>
+      </div>
+
+      <div className={styles.resultSummary}>
+        {sortedRows.length === rows.length
+          ? `全${sortedRows.length}件`
+          : `${sortedRows.length}件 / 全${rows.length}件`}
+        {sortedRows.length > 0 && `（${pageDisplayStart}〜${pageDisplayEnd}件目を表示）`}
       </div>
 
       <div className={styles.tableFrame}>
@@ -970,16 +1127,16 @@ export default function EmployeeClient() {
                     読み込み中...
                   </td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : sortedRows.length === 0 ? (
                 <tr>
                   <td className={styles.td} colSpan={showOperationColumn ? 7 : 6}>
                     表示対象のユーザーがいません。
                   </td>
                 </tr>
               ) : (
-                rows.map((row, index) => (
+                paginatedRows.map((row, index) => (
                   <tr key={row.profile_id}>
-                    <td className={styles.tdSmall}>{index + 1}</td>
+                    <td className={styles.tdSmall}>{pageStartIndex + index + 1}</td>
                     <td className={styles.td}>{row.email}</td>
                     <td className={styles.td}>{fullName(row.last_name, row.first_name)}</td>
                     <td className={styles.tdWide}>{row.team_paths}</td>
@@ -1017,6 +1174,28 @@ export default function EmployeeClient() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className={styles.paginationBar}>
+        <button
+          type="button"
+          className={styles.pageButton}
+          onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+          disabled={loading || currentPageSafe <= 1}
+        >
+          前へ
+        </button>
+        <span className={styles.pageInfo}>
+          {currentPageSafe} / {totalPages}ページ
+        </span>
+        <button
+          type="button"
+          className={styles.pageButton}
+          onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+          disabled={loading || currentPageSafe >= totalPages}
+        >
+          次へ
+        </button>
       </div>
 
       {open && canManageEmployee && (

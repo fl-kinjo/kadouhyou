@@ -141,13 +141,18 @@
 }
 
 .numberCell,
+.totalHeader,
 .totalCell {
   text-align: right;
 }
 
+.totalHeader,
 .totalCell {
   font-weight: 900;
-  border-left: 1px solid #d8d8d8;
+}
+
+.totalCell {
+  border-right: 1px solid #d8d8d8;
 }
 
 .rateRow td {

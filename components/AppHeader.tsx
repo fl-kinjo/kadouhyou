@@ -7,12 +7,19 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/app/utils/supabase/client";
 
 const MENU_GROUPS = [
+    {
+    key: "business",
+    title: "案件",
+    items: [
+      { href: "/project", label: "案件一覧" },
+      { href: "/report", label: "業務報告" },
+    ],
+  },
   {
     key: "attendance",
     title: "勤怠",
     items: [
       { href: "/attendance", label: "勤怠入力" },
-      { href: "/report", label: "業務報告" },
       { href: "/leave-request", label: "休暇申請" },
       { href: "/attendance-management", label: "勤怠管理", icon: true, adminOnly: true },
     ],
@@ -27,12 +34,11 @@ const MENU_GROUPS = [
   },
   {
     key: "project",
-    title: "案件",
+    title: "サマリー",
     items: [
-      { href: "/project", label: "案件管理" },
-      { href: "/summary", label: "案件サマリー" },
+      { href: "/summary/client", label: "年計サマリー" },
       { href: "/summary/sales2", label: "営業サマリー" },
-      { href: "/summary/client", label: "クライアント別年間実績" },
+      { href: "/summary", label: "案件サマリー" },
       { href: "/client", label: "クライアント管理", adminOnly: true },
       { href: "/partner", label: "パートナー管理", adminOnly: true },
       { href: "/project-request", label: "予定工数申請管理", icon: true, adminOnly: true },

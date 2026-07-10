@@ -413,7 +413,7 @@ export default function ClientSummaryClient() {
   return (
     <main className={styles.page}>
       <div className={styles.headerRow}>
-        <h1 className={styles.pageTitle}>クライアント別年間実績</h1>
+        <h1 className={styles.pageTitle}>年計サマリー</h1>
       </div>
 
       {message && <p className={styles.message}>{message}</p>}
@@ -430,7 +430,6 @@ export default function ClientSummaryClient() {
 
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <h2 className={styles.sectionTitle}>クライアント別サマリー</h2>
           {canEditTargets && (
             <Link href={`/summary/client/targets?year=${displayYear}`} className={styles.primaryLinkButton}>
               目標金額を編集する
@@ -444,10 +443,10 @@ export default function ClientSummaryClient() {
               <thead>
                 <tr>
                   <th className={styles.clientHeader}>クライアント</th>
+                  <th className={styles.totalHeader}>年間合計</th>
                   {fiscalMonths.map((month) => (
                     <th key={month.key}>{month.label}</th>
                   ))}
-                  <th>年間合計</th>
                 </tr>
               </thead>
               <tbody>
@@ -469,30 +468,30 @@ export default function ClientSummaryClient() {
                       </tr>
                       <tr>
                         <td className={styles.metricCell}>目標金額</td>
+                        <td className={styles.totalCell}>{formatCurrency(row.targetTotal)}</td>
                         {fiscalMonths.map((month, monthIndex) => (
                           <td key={`${row.key}-${month.key}-target`} className={styles.numberCell}>
                             {formatCurrency(row.targetMonths[monthIndex])}
                           </td>
                         ))}
-                        <td className={styles.totalCell}>{formatCurrency(row.targetTotal)}</td>
                       </tr>
                       <tr>
                         <td className={styles.metricCell}>単月実績</td>
+                        <td className={styles.totalCell}>{renderActualValue(row, "annual")}</td>
                         {fiscalMonths.map((month, monthIndex) => (
                           <td key={`${row.key}-${month.key}-actual`} className={styles.numberCell}>
                             {renderActualValue(row, monthIndex)}
                           </td>
                         ))}
-                        <td className={styles.totalCell}>{renderActualValue(row, "annual")}</td>
                       </tr>
                       <tr className={styles.rateRow}>
                         <td className={styles.metricCell}>達成率</td>
+                        <td className={styles.totalCell}>{formatPercent(row.rateTotal)}</td>
                         {fiscalMonths.map((month, monthIndex) => (
                           <td key={`${row.key}-${month.key}-rate`} className={styles.numberCell}>
                             {formatPercent(row.rateMonths[monthIndex])}
                           </td>
                         ))}
-                        <td className={styles.totalCell}>{formatPercent(row.rateTotal)}</td>
                       </tr>
                     </Fragment>
                   ))

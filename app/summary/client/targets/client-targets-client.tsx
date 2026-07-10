@@ -113,6 +113,7 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
   const [selectedRow, setSelectedRow] = useState<TargetSummaryRow | null>(null);
   const [annualInput, setAnnualInput] = useState("");
   const [monthInputs, setMonthInputs] = useState<string[]>([]);
+  const [modalErrorMsg, setModalErrorMsg] = useState("");
 
   const fiscalMonths = useMemo(() => getFiscalMonths(displayYear), [displayYear]);
 
@@ -218,6 +219,7 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
     setSelectedRow(null);
     setAnnualInput("");
     setMonthInputs([]);
+    setModalErrorMsg("");
     setMessage("");
   };
 
@@ -225,6 +227,7 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
     setSelectedRow(row);
     setAnnualInput(formatInputFromYen(row.annualTarget));
     setMonthInputs(row.targetMonths.map(formatInputFromYen));
+    setModalErrorMsg("");
     setModalMode("detail");
   };
 
@@ -232,21 +235,25 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
     setSelectedRow(row);
     setAnnualInput(formatInputFromYen(row.annualTarget));
     setMonthInputs(row.targetMonths.map(formatInputFromYen));
+    setModalErrorMsg("");
     setModalMode("edit");
   };
 
-  const monthlyTotalManYen = useMemo(
-    () => monthInputs.reduce((sum, value) => sum + parseManYenInput(value), 0),
+  const monthlyTotalYen = useMemo(
+    () => monthInputs.reduce((sum, value) => sum + manYenToYen(value), 0),
     [monthInputs]
   );
 
-  const annualInputManYen = useMemo(() => parseManYenInput(annualInput), [annualInput]);
-  const differenceManYen = monthlyTotalManYen - annualInputManYen;
+  const annualInputYen = useMemo(() => manYenToYen(annualInput), [annualInput]);
+  const differenceYen = monthlyTotalYen - annualInputYen;
+  const monthlyTotalManYen = monthlyTotalYen / 10000;
+  const differenceManYen = differenceYen / 10000;
 
   const applyMonthlySplit = () => {
     const annual = parseManYenInput(annualInput);
     if (annual <= 0) {
       setMonthInputs(Array.from({ length: fiscalMonths.length }, () => ""));
+      setModalErrorMsg("");
       return;
     }
 
@@ -260,10 +267,38 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
     });
 
     setMonthInputs(values);
+    setModalErrorMsg("");
+  };
+
+  const validateTargetBalance = () => {
+    if (differenceYen !== 0) {
+      return "月次合計が年間目標金額と一致していません。過不足金額が0万円になるように調整してください。";
+    }
+
+    return null;
+  };
+
+  const openConfirm = () => {
+    const validationError = validateTargetBalance();
+    if (validationError) {
+      setModalErrorMsg(validationError);
+      return;
+    }
+
+    setModalErrorMsg("");
+    setModalMode("confirm");
   };
 
   const saveTargets = async () => {
     if (!selectedRow) return;
+
+    const validationError = validateTargetBalance();
+    if (validationError) {
+      setModalErrorMsg(validationError);
+      setModalMode("edit");
+      return;
+    }
+
     setSaving(true);
     setMessage("");
 
@@ -312,10 +347,7 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
     }
   };
 
-  const selectedAnnualYen = useMemo(
-    () => monthInputs.reduce((sum, value) => sum + manYenToYen(value), 0),
-    [monthInputs]
-  );
+  const selectedAnnualYen = monthlyTotalYen;
 
   const renderMonthlyGrid = (readonly = false) => (
     <div className={styles.modalMonthGrid}>
@@ -331,6 +363,7 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
                 const next = [...monthInputs];
                 next[index] = event.target.value;
                 setMonthInputs(next);
+                setModalErrorMsg("");
               }}
               inputMode="decimal"
             />
@@ -459,7 +492,14 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
                   <label className={styles.singleField}>
                     <span>年間目標金額</span>
                     <div className={styles.amountInputRow}>
-                      <input value={annualInput} onChange={(event) => setAnnualInput(event.target.value)} inputMode="decimal" />
+                      <input
+                        value={annualInput}
+                        onChange={(event) => {
+                          setAnnualInput(event.target.value);
+                          setModalErrorMsg("");
+                        }}
+                        inputMode="decimal"
+                      />
                       <span>万円</span>
                     </div>
                   </label>
@@ -486,11 +526,13 @@ export default function ClientTargetsClient({ initialYear }: ClientTargetsClient
                   </div>
                 </div>
 
+                {modalErrorMsg && <p className={styles.modalErrorText}>{modalErrorMsg}</p>}
+
                 <div className={styles.modalButtonRow}>
                   <button type="button" className={styles.outlineButton} onClick={closeModal} disabled={saving}>
                     キャンセル
                   </button>
-                  <button type="button" className={styles.redButton} onClick={() => setModalMode("confirm")} disabled={saving}>
+                  <button type="button" className={styles.redButton} onClick={openConfirm} disabled={saving}>
                     確認する
                   </button>
                 </div>

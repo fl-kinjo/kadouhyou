@@ -413,3 +413,87 @@
     padding-left: 8px;
   }
 }
+
+.listControls {
+  margin-top: 16px;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.searchControl,
+.sortControl {
+  display: grid;
+  gap: 6px;
+}
+
+.searchInput {
+  width: min(420px, 100%);
+  min-width: 280px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  box-sizing: border-box;
+  background: #fff;
+  font-size: 14px;
+}
+
+.sortSelect {
+  min-width: 220px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  box-sizing: border-box;
+  background: #fff;
+  font-size: 14px;
+}
+
+.resultSummary {
+  margin-top: 14px;
+  font-size: 13px;
+  color: #555;
+}
+
+.paginationBar {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.pageButton {
+  border: 1px solid #bbb;
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pageButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pageInfo {
+  min-width: 120px;
+  text-align: center;
+  font-size: 13px;
+  color: #333;
+}
+
+@media (max-width: 640px) {
+  .listControls {
+    align-items: stretch;
+  }
+
+  .searchControl,
+  .sortControl,
+  .searchInput,
+  .sortSelect {
+    width: 100%;
+    min-width: 0;
+  }
+}

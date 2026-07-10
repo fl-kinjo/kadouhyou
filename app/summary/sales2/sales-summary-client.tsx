@@ -16,6 +16,7 @@ type ProjectRow = {
 };
 
 type SnapshotRow = {
+  id: string;
   project_id: string;
   name: string;
   client_id: string | null;
@@ -112,6 +113,18 @@ const SALES_STATUS_SHORT_LABELS: Record<number, string> = {
   2: "中",
   3: "低",
   4: "最終調整",
+};
+
+const SUPABASE_PAGE_SIZE = 1000;
+
+type SupabasePageResult<T> = {
+  data: T[] | null;
+  error: { message: string } | null;
+};
+
+type SnapshotDateRow = {
+  week_end_date: string | null;
+  project_id: string | null;
 };
 
 function toSafeNumber(value: number | string | null | undefined): number {
@@ -217,12 +230,14 @@ function buildChangeSet(
 ): ChangeSet {
   const previousMap = new Map(previousList.map((item) => [item.projectId, item]));
   const currentMap = new Map(currentList.map((item) => [item.projectId, item]));
+  const previousUniqueList = Array.from(previousMap.values());
+  const currentUniqueList = Array.from(currentMap.values());
 
-  const currentPipelineTotal = currentList
+  const currentPipelineTotal = currentUniqueList
     .filter((item) => isSalesStatus(item.status))
     .reduce((sum, item) => sum + item.invoiceAmount, 0);
 
-  const previousPipelineTotal = previousList
+  const previousPipelineTotal = previousUniqueList
     .filter((item) => isSalesStatus(item.status))
     .reduce((sum, item) => sum + item.invoiceAmount, 0);
 
@@ -233,7 +248,7 @@ function buildChangeSet(
   const won: ChangeItem[] = [];
   const unchanged: ChangeItem[] = [];
 
-  for (const current of currentList) {
+  for (const current of currentUniqueList) {
     const prev = previousMap.get(current.projectId);
     const currentIsSales = isSalesStatus(current.status);
     const prevIsSales = prev ? isSalesStatus(prev.status) : false;
@@ -272,7 +287,7 @@ function buildChangeSet(
     }
   }
 
-  for (const prev of previousList) {
+  for (const prev of previousUniqueList) {
     const current = currentMap.get(prev.projectId);
     const prevIsSales = isSalesStatus(prev.status);
     if (!prevIsSales) continue;
@@ -347,34 +362,112 @@ export default function SalesSummaryClient() {
       setErrorMsg("");
       setWarningMsg("");
 
-      try {
-        const [projectsRes, snapshotsRes, clientsRes, profilesRes] = await Promise.all([
-          supabase
-            .from("project")
-            .select("id,name,client_id,project_manager_id,status,invoice_amount,created_at")
-            .order("created_at", { ascending: false }),
-          supabase
+      const fetchAllPages = async <T,>(
+        fetchPage: (from: number, to: number) => Promise<SupabasePageResult<T>>
+      ): Promise<T[]> => {
+        const rows: T[] = [];
+
+        for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+          const to = from + SUPABASE_PAGE_SIZE - 1;
+          const { data, error } = await fetchPage(from, to);
+          if (error) throw new Error(error.message);
+
+          const pageRows = data ?? [];
+          rows.push(...pageRows);
+
+          if (pageRows.length < SUPABASE_PAGE_SIZE) break;
+        }
+
+        return rows;
+      };
+
+      const dedupeByKey = <T,>(rows: T[], getKey: (row: T) => string): T[] => {
+        const map = new Map<string, T>();
+        for (const row of rows) {
+          const key = getKey(row);
+          if (!map.has(key)) map.set(key, row);
+        }
+        return Array.from(map.values());
+      };
+
+      const fetchLatestSnapshotDates = async (): Promise<string[]> => {
+        const dates: string[] = [];
+        const seen = new Set<string>();
+
+        for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+          const to = from + SUPABASE_PAGE_SIZE - 1;
+          const { data, error } = await supabase
             .from("project_sales_weekly_snapshot")
-            .select(
-              "project_id,name,client_id,project_manager_id,status,invoice_amount,project_created_at,week_end_date"
-            )
-            .order("week_end_date", { ascending: false }),
-          supabase.from("client").select("id,name").order("name", { ascending: true }),
-          supabase
-            .from("profiles_2")
-            .select("id,last_name,first_name,email")
-            .order("created_at", { ascending: true }),
+            .select("week_end_date,project_id")
+            .not("week_end_date", "is", null)
+            .order("week_end_date", { ascending: false })
+            .order("project_id", { ascending: true })
+            .range(from, to);
+
+          if (error) throw new Error(error.message);
+
+          const pageRows = (data ?? []) as SnapshotDateRow[];
+          for (const row of pageRows) {
+            if (!row.week_end_date || seen.has(row.week_end_date)) continue;
+            seen.add(row.week_end_date);
+            dates.push(row.week_end_date);
+
+            if (dates.length >= 2) break;
+          }
+
+          if (dates.length >= 2 || pageRows.length < SUPABASE_PAGE_SIZE) break;
+        }
+
+        return dates;
+      };
+
+      try {
+        const latestSnapshotDates = await fetchLatestSnapshotDates();
+
+        const [projectRows, snapshotRows, clientRows, profileRows] = await Promise.all([
+          fetchAllPages<ProjectRow>((from, to) =>
+            supabase
+              .from("project")
+              .select("id,name,client_id,project_manager_id,status,invoice_amount,created_at")
+              .order("created_at", { ascending: false })
+              .order("id", { ascending: true })
+              .range(from, to)
+          ),
+          latestSnapshotDates.length === 0
+            ? Promise.resolve([] as SnapshotRow[])
+            : fetchAllPages<SnapshotRow>((from, to) =>
+                supabase
+                  .from("project_sales_weekly_snapshot")
+                  .select(
+                    "id,project_id,name,client_id,project_manager_id,status,invoice_amount,project_created_at,week_end_date"
+                  )
+                  .in("week_end_date", latestSnapshotDates)
+                  .order("week_end_date", { ascending: false })
+                  .order("project_id", { ascending: true })
+                  .range(from, to)
+              ),
+          fetchAllPages<ClientRow>((from, to) =>
+            supabase
+              .from("client")
+              .select("id,name")
+              .order("name", { ascending: true })
+              .order("id", { ascending: true })
+              .range(from, to)
+          ),
+          fetchAllPages<ProfileRow>((from, to) =>
+            supabase
+              .from("profiles_2")
+              .select("id,last_name,first_name,email")
+              .order("created_at", { ascending: true })
+              .order("id", { ascending: true })
+              .range(from, to)
+          ),
         ]);
 
-        if (projectsRes.error) throw new Error(projectsRes.error.message);
-        if (snapshotsRes.error) throw new Error(snapshotsRes.error.message);
-        if (clientsRes.error) throw new Error(clientsRes.error.message);
-        if (profilesRes.error) throw new Error(profilesRes.error.message);
-
-        setProjects((projectsRes.data ?? []) as ProjectRow[]);
-        setSnapshots((snapshotsRes.data ?? []) as SnapshotRow[]);
-        setClients((clientsRes.data ?? []) as ClientRow[]);
-        setProfiles((profilesRes.data ?? []) as ProfileRow[]);
+        setProjects(dedupeByKey(projectRows, (row) => row.id));
+        setSnapshots(dedupeByKey(snapshotRows, (row) => `${row.week_end_date}-${row.project_id}`));
+        setClients(dedupeByKey(clientRows, (row) => row.id));
+        setProfiles(dedupeByKey(profileRows, (row) => row.id));
       } catch (error) {
         setErrorMsg(error instanceof Error ? error.message : String(error));
       } finally {
@@ -672,8 +765,8 @@ export default function SalesSummaryClient() {
                 {section.items.length === 0 ? (
                   <div className={styles.emptyRow}>対象案件がありません。</div>
                 ) : (
-                  section.items.map((item) => (
-                    <div key={`${section.key}-${item.projectId}`} className={styles.itemRow}>
+                  section.items.map((item, index) => (
+                    <div key={`${section.key}-${item.projectId}-${index}`} className={styles.itemRow}>
                       <div className={styles.itemTopRow}>
                         <Link
                           href={`/project/${item.projectId}`}
