@@ -1243,18 +1243,19 @@ export default function EmployeeClient() {
                 />
               </div>
 
-              <div className={styles.formRow}>
-                <div className={styles.formLabel}>管理者</div>
-                <label className={styles.checkboxLabel}>
-                  <input
-                    type="checkbox"
-                    checked={formIsAdmin}
-                    onChange={(event) => setFormIsAdmin(event.target.checked)}
-                    disabled={!isAdmin}
-                  />
-                  <span>管理者にする</span>
-                </label>
-              </div>
+              {isAdmin && (
+                <div className={styles.formRow}>
+                  <div className={styles.formLabel}>管理者</div>
+                  <label className={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={formIsAdmin}
+                      onChange={(event) => setFormIsAdmin(event.target.checked)}
+                    />
+                    <span>管理者にする</span>
+                  </label>
+                </div>
+              )}
 
               <div className={styles.formRow}>
                 <div className={styles.formLabel}>総務権限</div>
