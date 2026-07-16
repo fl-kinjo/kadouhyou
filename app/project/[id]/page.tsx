@@ -24,6 +24,8 @@ type ProjectRow = {
   estimate: string | null;
   invoice: string | null;
   planned_cost_approval_status: number | null;
+  planned_cost_requested_at: string | null;
+  planned_cost_reviewed_at: string | null;
   created_at: string | null;
   updated_at: string | null;
   updated_by: string | null;
@@ -72,6 +74,24 @@ type PlannedCostRow = {
   operating_person_months: number | string | null;
   target_year_month: string;
   amount: number | null;
+};
+
+type PlannedCostRequestRow = {
+  id: string;
+  project_id: string;
+  requested_by: string | null;
+  requested_at: string;
+  approval_status: number;
+  completed_at: string | null;
+};
+
+type PlannedCostApproverRow = {
+  id: string;
+  request_id: string;
+  approver_profile_id: string;
+  approval_status: number;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
 };
 
 type ActualCostRow = {
@@ -307,7 +327,7 @@ export default async function ProjectDetailPage(props: PageProps) {
   const { data: project, error: projectError } = await supabase
     .from("project")
     .select(
-      "id,project_no,name,client_id,start_date,end_date,project_manager_id,sales_profile_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice,planned_cost_approval_status,created_at,updated_at,updated_by"
+      "id,project_no,name,client_id,start_date,end_date,project_manager_id,sales_profile_id,pm_revenue_share,member_revenue_share,status,invoice_amount,invoice_month,payment_due_date,estimate,invoice,planned_cost_approval_status,planned_cost_requested_at,planned_cost_reviewed_at,created_at,updated_at,updated_by"
     )
     .eq("id", id)
     .single();
@@ -324,6 +344,7 @@ export default async function ProjectDetailPage(props: PageProps) {
     { data: jobs, error: jobsError },
     { data: partners, error: partnersError },
     { data: plannedCosts, error: plannedCostsError },
+    { data: latestPlannedCostRequest, error: latestPlannedCostRequestError },
     { data: actualCosts, error: actualCostsError },
     { data: reports, error: reportsError },
     { data: savedRecognitions, error: savedRecognitionsError },
@@ -346,6 +367,13 @@ export default async function ProjectDetailPage(props: PageProps) {
       .order("target_year_month", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
+      .from("project_planned_cost_request")
+      .select("id,project_id,requested_by,requested_at,approval_status,completed_at")
+      .eq("project_id", id)
+      .order("requested_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
       .from("project_actual_cost")
       .select("id,project_id,category,expense_name,partner_id,target_year_month,amount")
       .eq("project_id", id)
@@ -367,6 +395,7 @@ export default async function ProjectDetailPage(props: PageProps) {
   if (jobsError) throw new Error(jobsError.message);
   if (partnersError) throw new Error(partnersError.message);
   if (plannedCostsError) throw new Error(plannedCostsError.message);
+  if (latestPlannedCostRequestError) throw new Error(latestPlannedCostRequestError.message);
   if (actualCostsError) throw new Error(actualCostsError.message);
   if (reportsError) throw new Error(reportsError.message);
   if (savedRecognitionsError) throw new Error(savedRecognitionsError.message);
@@ -379,6 +408,20 @@ export default async function ProjectDetailPage(props: PageProps) {
   const jobRows = (jobs ?? []) as JobRow[];
   const partnerRows = (partners ?? []) as PartnerRow[];
   const plannedCostRows = (plannedCosts ?? []) as PlannedCostRow[];
+  const latestPlannedCostRequestRow = (latestPlannedCostRequest ?? null) as PlannedCostRequestRow | null;
+  let plannedCostApproverRows: PlannedCostApproverRow[] = [];
+
+  if (latestPlannedCostRequestRow?.id && [1, 2, 3, 4].includes(projectRow.planned_cost_approval_status ?? 0)) {
+    const { data: plannedCostApprovers, error: plannedCostApproversError } = await supabase
+      .from("project_planned_cost_request_approver")
+      .select("id,request_id,approver_profile_id,approval_status,reviewed_at,reviewed_by")
+      .eq("request_id", latestPlannedCostRequestRow.id)
+      .order("created_at", { ascending: true });
+
+    if (plannedCostApproversError) throw new Error(plannedCostApproversError.message);
+    plannedCostApproverRows = (plannedCostApprovers ?? []) as PlannedCostApproverRow[];
+  }
+
   const actualCostRows = (actualCosts ?? []) as ActualCostRow[];
   const reportRows = (reports ?? []) as ReportRow[];
   const savedRecognitionRows = (savedRecognitions ?? []) as SavedRecognitionRow[];
@@ -588,6 +631,11 @@ export default async function ProjectDetailPage(props: PageProps) {
           startDate: projectRow.start_date,
           endDate: projectRow.end_date,
           plannedCosts: plannedCostRows,
+          plannedCostApprovers: plannedCostApproverRows,
+          plannedCostRequestId: latestPlannedCostRequestRow?.id ?? null,
+          plannedCostApprovalStatus: projectRow.planned_cost_approval_status,
+          plannedCostRequestedAt: projectRow.planned_cost_requested_at,
+          plannedCostReviewedAt: projectRow.planned_cost_reviewed_at,
           actualCosts: actualCostRows,
           reports: reportRows,
           profiles: allProfiles,

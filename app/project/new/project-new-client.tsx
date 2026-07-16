@@ -920,17 +920,6 @@ export default function ProjectNewClient() {
           <p className={styles.emptyText}>読み込み中...</p>
         ) : (
           <>
-            <div className={styles.formActionTop}>
-              <button
-                type="button"
-                onClick={submit}
-                className={styles.btnPrimary}
-                disabled={saving}
-              >
-                {saving ? "登録中..." : "登録する"}
-              </button>
-            </div>
-
             <div className={styles.gridRow}>
               <div className={styles.gridLabel}>クライアント名</div>
               <SearchableSelect
@@ -1177,6 +1166,19 @@ export default function ProjectNewClient() {
                     保存先フォルダ: {selectedFolder.name}
                   </p>
                 )}
+              </div>
+            </div>
+
+            <div className={styles.formActionBottom}>
+              <div className={styles.formActionInner}>
+                <button
+                  type="button"
+                  onClick={submit}
+                  className={styles.btnPrimary}
+                  disabled={saving}
+                >
+                  {saving ? "登録中..." : "登録する"}
+                </button>
               </div>
             </div>
 

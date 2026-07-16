@@ -9,6 +9,7 @@ type ProfileRow = {
   id: string;
   last_name: string | null;
   first_name: string | null;
+  email: string | null;
   status: number | null;
 };
 
@@ -33,6 +34,15 @@ type PlannedCostRow = {
   operating_person_months: number | string | null;
   target_year_month: string;
   amount: number | null;
+};
+
+type PlannedCostApproverRow = {
+  id: string;
+  request_id: string;
+  approver_profile_id: string;
+  approval_status: number;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
 };
 
 type ActualCostRow = {
@@ -60,6 +70,11 @@ export default function CostTabsSection({
   startDate,
   endDate,
   plannedCosts,
+  plannedCostApprovers,
+  plannedCostRequestId,
+  plannedCostApprovalStatus,
+  plannedCostRequestedAt,
+  plannedCostReviewedAt,
   actualCosts,
   reports,
   profiles,
@@ -70,6 +85,11 @@ export default function CostTabsSection({
   startDate: string | null;
   endDate: string | null;
   plannedCosts: PlannedCostRow[];
+  plannedCostApprovers: PlannedCostApproverRow[];
+  plannedCostRequestId: string | null;
+  plannedCostApprovalStatus: number | null;
+  plannedCostRequestedAt: string | null;
+  plannedCostReviewedAt: string | null;
   actualCosts: ActualCostRow[];
   reports: ReportRow[];
   profiles: ProfileRow[];
@@ -116,6 +136,11 @@ export default function CostTabsSection({
             startDate={startDate}
             endDate={endDate}
             initialCosts={plannedCosts}
+            initialApprovers={plannedCostApprovers}
+            initialRequestId={plannedCostRequestId}
+            initialApprovalStatus={plannedCostApprovalStatus}
+            initialRequestedAt={plannedCostRequestedAt}
+            initialReviewedAt={plannedCostReviewedAt}
             profiles={profiles}
             partners={partners}
             jobs={jobs}

@@ -906,17 +906,6 @@ export default function ProjectEditClient({
       <div className={styles.topBorder} />
 
       <div className={styles.card}>
-        <div className={styles.formActionTop}>
-          <button
-            type="button"
-            onClick={submit}
-            className={styles.btnPrimary}
-            disabled={saving}
-          >
-            {saving ? "更新中..." : "更新する"}
-          </button>
-        </div>
-
         <div className={styles.gridRow}>
           <div className={styles.gridLabel}>クライアント名</div>
           <SearchableSelect
@@ -1162,6 +1151,19 @@ export default function ProjectEditClient({
                 保存先フォルダ: {selectedFolder.name}
               </p>
             )}
+          </div>
+        </div>
+
+        <div className={styles.formActionBottom}>
+          <div className={styles.formActionInner}>
+            <button
+              type="button"
+              onClick={submit}
+              className={styles.btnPrimary}
+              disabled={saving}
+            >
+              {saving ? "更新中..." : "更新する"}
+            </button>
           </div>
         </div>
 

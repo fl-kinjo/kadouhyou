@@ -90,6 +90,18 @@ type InitialData = {
       target_year_month: string;
       amount: number | null;
     }[];
+    plannedCostApprovers: {
+      id: string;
+      request_id: string;
+      approver_profile_id: string;
+      approval_status: number;
+      reviewed_at: string | null;
+      reviewed_by: string | null;
+    }[];
+    plannedCostRequestId: string | null;
+    plannedCostApprovalStatus: number | null;
+    plannedCostRequestedAt: string | null;
+    plannedCostReviewedAt: string | null;
     actualCosts: {
       id: string;
       project_id: string;
@@ -579,6 +591,11 @@ export default function ProjectDetailClient({ initialData }: { initialData: Init
         startDate={initialData.cost.startDate}
         endDate={initialData.cost.endDate}
         plannedCosts={initialData.cost.plannedCosts}
+        plannedCostApprovers={initialData.cost.plannedCostApprovers}
+        plannedCostRequestId={initialData.cost.plannedCostRequestId}
+        plannedCostApprovalStatus={initialData.cost.plannedCostApprovalStatus}
+        plannedCostRequestedAt={initialData.cost.plannedCostRequestedAt}
+        plannedCostReviewedAt={initialData.cost.plannedCostReviewedAt}
         actualCosts={initialData.cost.actualCosts}
         reports={initialData.cost.reports}
         profiles={initialData.cost.profiles}

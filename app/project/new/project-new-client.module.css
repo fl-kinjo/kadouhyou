@@ -63,10 +63,18 @@
   box-sizing: border-box;
 }
 
-.formActionTop {
-  position: absolute;
-  top: 4px;
-  right: 0;
+.formActionBottom {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 520px);
+  gap: 18px;
+  align-items: center;
+  margin-top: 28px;
+}
+
+.formActionInner {
+  grid-column: 2;
+  display: flex;
+  justify-content: center;
 }
 
 .gridRow {
@@ -312,11 +320,15 @@
     max-width: none;
   }
 
-  .formActionTop {
-    position: static;
-    display: flex;
-    justify-content: flex-start;
-    margin-bottom: 18px;
+  .formActionBottom {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 22px;
+  }
+
+  .formActionInner {
+    grid-column: 1;
+    justify-content: center;
   }
 
   .gridRow {

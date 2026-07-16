@@ -9,6 +9,7 @@ type Profile = {
   id: string;
   last_name: string | null;
   first_name: string | null;
+  email: string | null;
   status: number | null;
 };
 
@@ -33,6 +34,15 @@ type PlannedCost = {
   operating_person_months: number | string | null;
   target_year_month: string;
   amount: number | string | null;
+};
+
+type PlannedCostApprover = {
+  id: string;
+  request_id: string;
+  approver_profile_id: string;
+  approval_status: number;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
 };
 
 type MonthEntry = {
@@ -62,12 +72,45 @@ const CATEGORY_LABELS: Record<number, string> = {
 const COST_PER_PERSON_DAY = 35000;
 
 const PLANNED_COST_APPROVAL_STATUS = {
+  draft: 0,
   pending: 1,
+  approved: 2,
+  rejected: 3,
+  canceled: 4,
 } as const;
+
+const APPROVAL_STATUS_LABELS: Record<number, string> = {
+  0: "未申請",
+  1: "申請中",
+  2: "承認済み",
+  3: "却下",
+  4: "取消",
+};
 
 function fullName(lastName?: string | null, firstName?: string | null) {
   const name = `${lastName ?? ""}${firstName ?? ""}`.trim();
   return name || "-";
+}
+
+function profileDisplayName(profile?: Profile | null) {
+  if (!profile) return "-";
+  return fullName(profile.last_name, profile.first_name) || profile.email || "-";
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/\s+/g, "");
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${y}/${m}/${d} ${hh}:${mm}`;
 }
 
 function uniq<T>(items: T[]) {
@@ -138,6 +181,11 @@ export default function PlannedCostSection({
   endDate,
   initialCosts,
   initialRows,
+  initialApprovers,
+  initialRequestId = null,
+  initialApprovalStatus = 0,
+  initialRequestedAt = null,
+  initialReviewedAt = null,
   profiles,
   partners,
   jobs,
@@ -150,6 +198,11 @@ export default function PlannedCostSection({
   endDate: string | null;
   initialCosts?: PlannedCost[] | null;
   initialRows?: PlannedCost[] | null;
+  initialApprovers?: PlannedCostApprover[] | null;
+  initialRequestId?: string | null;
+  initialApprovalStatus?: number | null;
+  initialRequestedAt?: string | null;
+  initialReviewedAt?: string | null;
   profiles: Profile[];
   partners: Partner[];
   jobs: Job[];
@@ -161,6 +214,15 @@ export default function PlannedCostSection({
   const supabase = createClient();
 
   const [costs, setCosts] = useState<PlannedCost[]>(Array.isArray(initialCosts) ? initialCosts : Array.isArray(initialRows) ? initialRows : []);
+  const [, setCurrentRequestId] = useState<string | null>(initialRequestId ?? null);
+  const [approvalStatus, setApprovalStatus] = useState<number>(initialApprovalStatus ?? 0);
+  const [requestedAt, setRequestedAt] = useState<string | null>(initialRequestedAt ?? null);
+  const [reviewedAt, setReviewedAt] = useState<string | null>(initialReviewedAt ?? null);
+  const [approvers, setApprovers] = useState<PlannedCostApprover[]>(Array.isArray(initialApprovers) ? initialApprovers : []);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestSaving, setRequestSaving] = useState(false);
+  const [approverSearch, setApproverSearch] = useState("");
+  const [selectedApproverIds, setSelectedApproverIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -187,6 +249,31 @@ export default function PlannedCostSection({
   const jobMap = useMemo(() => new Map(jobs.map((job) => [job.id, job.name])), [jobs]);
   const selectableProfiles = useMemo(() => profiles.filter((profile) => profile.status !== 2), [profiles]);
   const monthLabels = useMemo(() => buildMonthLabels(startDate, endDate, costs), [costs, endDate, startDate]);
+  const approverNameText = useMemo(() => {
+    if (approvers.length === 0) return "-";
+    return approvers
+      .map((approver) => {
+        const profile = profileMap.get(approver.approver_profile_id);
+        const name = profileDisplayName(profile);
+        const status = APPROVAL_STATUS_LABELS[approver.approval_status] ?? "-";
+        return `${name}（${status}）`;
+      })
+      .join("、");
+  }, [approvers, profileMap]);
+  const filteredApproverCandidates = useMemo(() => {
+    const keyword = normalizeSearchText(approverSearch);
+    return selectableProfiles.filter((profile) => {
+      if (selectedApproverIds.includes(profile.id)) return false;
+      if (!keyword) return true;
+      const values = [
+        profile.last_name,
+        profile.first_name,
+        profileDisplayName(profile),
+        profile.email,
+      ];
+      return values.some((value) => normalizeSearchText(value).includes(keyword));
+    });
+  }, [approverSearch, selectableProfiles, selectedApproverIds]);
 
   const groups = useMemo<CostGroup[]>(() => {
     const map = new Map<string, CostGroup>();
@@ -218,6 +305,28 @@ export default function PlannedCostSection({
     });
   }, [costs, jobMap]);
 
+  const plannedLaborGroups = useMemo(() => groups.filter((group) => group.category === 2), [groups]);
+  const isApprovalPending = approvalStatus === PLANNED_COST_APPROVAL_STATUS.pending;
+  const isApprovalCompleted = [
+    PLANNED_COST_APPROVAL_STATUS.approved,
+    PLANNED_COST_APPROVAL_STATUS.rejected,
+    PLANNED_COST_APPROVAL_STATUS.canceled,
+  ].includes(approvalStatus as 2 | 3 | 4);
+  const requestButtonLabel = isApprovalPending
+    ? "申請中"
+    : isApprovalCompleted
+    ? "予定工数を再申請する"
+    : "予定工数を申請する";
+
+  const markApprovalDraftAfterCostChange = () => {
+    if (!isApprovalCompleted) return;
+    setCurrentRequestId(null);
+    setApprovalStatus(PLANNED_COST_APPROVAL_STATUS.draft);
+    setRequestedAt(null);
+    setReviewedAt(null);
+    setApprovers([]);
+  };
+
   const monthTotals = useMemo(() => {
     const map = new Map<string, number>();
     for (const cost of costs) {
@@ -230,6 +339,10 @@ export default function PlannedCostSection({
   const grandTotal = useMemo(() => Array.from(monthTotals.values()).reduce((sum, value) => sum + value, 0), [monthTotals]);
 
   const openCreate = () => {
+    if (isApprovalPending) {
+      setErrorMsg("予定工数申請中は予定工数を編集できません。承認・却下・取消後に再編集してください。");
+      return;
+    }
     resetForm();
     setEditGroupKey(null);
     setOpen(true);
@@ -261,6 +374,10 @@ export default function PlannedCostSection({
   };
 
   const openEdit = (group: CostGroup) => {
+    if (isApprovalPending) {
+      setErrorMsg("予定工数申請中は予定工数を編集できません。承認・却下・取消後に再編集してください。");
+      return;
+    }
     setErrorMsg("");
     setEditGroupKey(group.key);
     setCategory(String(group.category));
@@ -317,34 +434,30 @@ export default function PlannedCostSection({
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError) throw new Error(authError.message);
     const authUserId = authData.user?.id;
+    const authUserEmail = authData.user?.email;
     if (!authUserId) throw new Error("ログインユーザーを取得できません。");
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profileById, error: profileByIdError } = await supabase
       .from("profiles_2")
       .select("id")
       .eq("id", authUserId)
       .maybeSingle();
 
-    if (profileError) throw new Error(profileError.message);
-    if (!profile?.id) throw new Error("更新者プロフィールが見つかりません。");
+    if (profileByIdError) throw new Error(profileByIdError.message);
+    if (profileById?.id) return profileById.id;
 
-    return profile.id;
-  };
+    if (!authUserEmail) throw new Error("ログインユーザーのメールアドレスを取得できません。");
 
-  const markPlannedCostApprovalPending = async (updaterId: string) => {
-    const { error } = await supabase
-      .from("project")
-      .update({
-        planned_cost_approval_status: PLANNED_COST_APPROVAL_STATUS.pending,
-        planned_cost_requested_at: new Date().toISOString(),
-        planned_cost_requested_by: updaterId,
-        planned_cost_reviewed_at: null,
-        planned_cost_reviewed_by: null,
-        updated_by: updaterId,
-      })
-      .eq("id", projectId);
+    const { data: profileByEmail, error: profileByEmailError } = await supabase
+      .from("profiles_2")
+      .select("id")
+      .ilike("email", authUserEmail)
+      .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (profileByEmailError) throw new Error(profileByEmailError.message);
+    if (!profileByEmail?.id) throw new Error("更新者プロフィールが見つかりません。");
+
+    return profileByEmail.id;
   };
 
   const save = async () => {
@@ -374,7 +487,6 @@ export default function PlannedCostSection({
     try {
       const updaterId = await getUpdaterId();
       const targetGroup = editGroupKey ? groups.find((group) => group.key === editGroupKey) : null;
-      const shouldRequestPlannedCostApproval = categoryNumber === 2 || targetGroup?.category === 2;
       const payload = monthEntries.map((entry) => ({
         project_id: projectId,
         category: categoryNumber,
@@ -402,9 +514,6 @@ export default function PlannedCostSection({
 
       if (error) throw new Error(error.message);
 
-      if (shouldRequestPlannedCostApproval) {
-        await markPlannedCostApprovalPending(updaterId);
-      }
 
       const nextInserted = (data ?? []) as PlannedCost[];
       setCosts((current) => {
@@ -413,6 +522,7 @@ export default function PlannedCostSection({
           : current;
         return [...filtered, ...nextInserted].sort((a, b) => a.target_year_month.localeCompare(b.target_year_month));
       });
+      markApprovalDraftAfterCostChange();
       setOpen(false);
       setEditGroupKey(null);
       router.refresh();
@@ -424,6 +534,10 @@ export default function PlannedCostSection({
   };
 
   const removeGroup = async (group: CostGroup) => {
+    if (isApprovalPending) {
+      setErrorMsg("予定工数申請中は予定工数を削除できません。承認・却下・取消後に再編集してください。");
+      return;
+    }
     if (!window.confirm("このコスト行を削除しますか？")) return;
     setErrorMsg("");
     try {
@@ -431,14 +545,87 @@ export default function PlannedCostSection({
       const { error } = await supabase.from("project_planned_cost").delete().in("id", group.rowIds);
       if (error) throw new Error(error.message);
 
-      if (group.category === 2) {
-        await markPlannedCostApprovalPending(updaterId);
-      }
 
       setCosts((current) => current.filter((item) => !group.rowIds.includes(item.id)));
+      markApprovalDraftAfterCostChange();
       router.refresh();
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const openRequestModal = () => {
+    setErrorMsg("");
+    if (isApprovalPending) {
+      setErrorMsg("申請中の承認者は変更できません。承認・却下・取消後に再申請してください。");
+      return;
+    }
+    if (plannedLaborGroups.length === 0) {
+      setErrorMsg("予定工数を1件以上入力してから申請してください。");
+      return;
+    }
+    setSelectedApproverIds([]);
+    setApproverSearch("");
+    setRequestOpen(true);
+  };
+
+  const closeRequestModal = () => {
+    if (requestSaving) return;
+    setRequestOpen(false);
+    setApproverSearch("");
+  };
+
+  const addApprover = (profileId: string) => {
+    setSelectedApproverIds((current) => (current.includes(profileId) ? current : [...current, profileId]));
+    setApproverSearch("");
+  };
+
+  const removeApprover = (profileId: string) => {
+    setSelectedApproverIds((current) => current.filter((id) => id !== profileId));
+  };
+
+  const submitApprovalRequest = async () => {
+    setErrorMsg("");
+    if (plannedLaborGroups.length === 0) {
+      setErrorMsg("予定工数を1件以上入力してから申請してください。");
+      return;
+    }
+    if (selectedApproverIds.length === 0) {
+      setErrorMsg("承認者を1名以上選択してください。");
+      return;
+    }
+
+    setRequestSaving(true);
+    try {
+      const { data: requestIdData, error } = await supabase.rpc("request_project_planned_cost_review", {
+        target_project_id: projectId,
+        approver_profile_ids: selectedApproverIds,
+      });
+
+      if (error) throw new Error(error.message);
+
+      const nextRequestId = typeof requestIdData === "string" ? requestIdData : null;
+      if (!nextRequestId) throw new Error("申請IDを取得できませんでした。");
+
+      const { data: approverData, error: approverError } = await supabase
+        .from("project_planned_cost_request_approver")
+        .select("id,request_id,approver_profile_id,approval_status,reviewed_at,reviewed_by")
+        .eq("request_id", nextRequestId)
+        .order("created_at", { ascending: true });
+
+      if (approverError) throw new Error(approverError.message);
+
+      setCurrentRequestId(nextRequestId);
+      setApprovers((approverData ?? []) as PlannedCostApprover[]);
+      setApprovalStatus(PLANNED_COST_APPROVAL_STATUS.pending);
+      setRequestedAt(new Date().toISOString());
+      setReviewedAt(null);
+      setRequestOpen(false);
+      router.refresh();
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRequestSaving(false);
     }
   };
 
@@ -451,11 +638,14 @@ export default function PlannedCostSection({
             <button type="button" className={styles.addButton} onClick={openCreate}>
               コスト行を追加
             </button>
+            <button type="button" className={styles.confirmButton} onClick={openRequestModal} disabled={requestSaving || isApprovalPending}>
+              {requestButtonLabel}
+            </button>
           </div>
         </div>
       )}
 
-      {errorMsg && !open && <p className={styles.errorText}>{errorMsg}</p>}
+      {errorMsg && !open && !requestOpen && <p className={styles.errorText}>{errorMsg}</p>}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -508,10 +698,10 @@ export default function PlannedCostSection({
                     ))}
                     <td className={styles.tdTotal}>{formatYen(total)}</td>
                     <td className={styles.tdActions}>
-                      <button type="button" className={styles.smallButton} onClick={() => openEdit(group)}>
+                      <button type="button" className={styles.smallButton} onClick={() => openEdit(group)} disabled={isApprovalPending}>
                         編集
                       </button>
-                      <button type="button" className={styles.smallButton} onClick={() => removeGroup(group)}>
+                      <button type="button" className={styles.smallButton} onClick={() => removeGroup(group)} disabled={isApprovalPending}>
                         削除
                       </button>
                     </td>
@@ -537,6 +727,109 @@ export default function PlannedCostSection({
           </tbody>
         </table>
       </div>
+
+      <div className={styles.approvalPanel}>
+        <div className={styles.approvalInfoGrid}>
+          <div>
+            <div className={styles.approvalLabel}>予定工数申請ステータス</div>
+            <div className={styles.approvalValue}>{APPROVAL_STATUS_LABELS[approvalStatus] ?? "-"}</div>
+          </div>
+          <div>
+            <div className={styles.approvalLabel}>申請日時</div>
+            <div className={styles.approvalValue}>{formatDateTime(requestedAt)}</div>
+          </div>
+          <div>
+            <div className={styles.approvalLabel}>承認完了日時</div>
+            <div className={styles.approvalValue}>{formatDateTime(reviewedAt)}</div>
+          </div>
+          <div>
+            <div className={styles.approvalLabel}>承認者</div>
+            <div className={styles.approvalValue}>{approverNameText}</div>
+          </div>
+        </div>
+        <button type="button" className={styles.confirmButton} onClick={openRequestModal} disabled={requestSaving || isApprovalPending}>
+          {requestButtonLabel}
+        </button>
+        {isApprovalPending && (
+          <p className={styles.approvalNotice}>申請中は予定工数と承認者を変更できません。</p>
+        )}
+      </div>
+
+      {requestOpen && (
+        <div className={styles.modalOverlay} onClick={closeRequestModal}>
+          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>予定工数の申請</h3>
+              <button type="button" className={styles.closeButton} onClick={closeRequestModal} aria-label="close">
+                ✕
+              </button>
+            </div>
+
+            <div className={styles.modalBody}>
+              <p className={styles.formHelpText}>
+                予定工数を確認してもらう承認者を選択してください。承認者は複数追加できます。
+              </p>
+
+              <div className={styles.formRow}>
+                <label className={styles.formLabel}>承認者検索</label>
+                <input
+                  value={approverSearch}
+                  onChange={(event) => setApproverSearch(event.target.value)}
+                  className={styles.input}
+                  placeholder="氏名・メールアドレスで検索"
+                />
+              </div>
+
+              <div className={styles.candidateList}>
+                {filteredApproverCandidates.length === 0 ? (
+                  <div className={styles.candidateEmpty}>候補がありません。</div>
+                ) : (
+                  filteredApproverCandidates.slice(0, 20).map((profile) => (
+                    <button
+                      key={profile.id}
+                      type="button"
+                      className={styles.candidateButton}
+                      onClick={() => addApprover(profile.id)}
+                    >
+                      <span>{profileDisplayName(profile)}</span>
+                      <small>{profile.email ?? ""}</small>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className={styles.selectedApproverArea}>
+                <div className={styles.selectedApproverTitle}>選択中の承認者</div>
+                {selectedApproverIds.length === 0 ? (
+                  <p className={styles.formHelpText}>承認者が選択されていません。</p>
+                ) : (
+                  <div className={styles.selectedApproverList}>
+                    {selectedApproverIds.map((profileId) => {
+                      const profile = profileMap.get(profileId);
+                      return (
+                        <span key={profileId} className={styles.selectedApproverChip}>
+                          {profileDisplayName(profile)}
+                          <button type="button" onClick={() => removeApprover(profileId)} aria-label="remove">
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {errorMsg && <p className={styles.errorText}>{errorMsg}</p>}
+
+              <div className={styles.submitRow}>
+                <button type="button" onClick={submitApprovalRequest} className={styles.submitButton} disabled={requestSaving}>
+                  {requestSaving ? "申請中..." : "申請する"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className={styles.modalOverlay} onClick={closeModal}>

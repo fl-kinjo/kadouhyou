@@ -333,3 +333,139 @@
     padding: 24px 20px 24px;
   }
 }
+
+.approvalPanel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #d7d7d7;
+  border-radius: 10px;
+  background: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.approvalInfoGrid {
+  flex: 1;
+  min-width: 260px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+}
+
+.approvalLabel {
+  font-size: 12px;
+  font-weight: 800;
+  color: #777;
+  margin-bottom: 4px;
+}
+
+.approvalValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+  line-height: 1.5;
+}
+
+.formHelpText {
+  margin: 0 0 16px;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.candidateList {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #d7d7d7;
+  border-radius: 8px;
+  margin: 10px 0 18px;
+}
+
+.candidateButton {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #eeeeee;
+  background: #fff;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.candidateButton:last-child {
+  border-bottom: none;
+}
+
+.candidateButton:hover {
+  background: #f8f8f8;
+}
+
+.candidateButton small {
+  color: #777;
+  font-weight: 500;
+}
+
+.candidateEmpty {
+  padding: 14px 12px;
+  color: #777;
+  text-align: center;
+}
+
+.selectedApproverArea {
+  margin-top: 16px;
+}
+
+.selectedApproverTitle {
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.selectedApproverList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selectedApproverChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f2f2f2;
+  font-weight: 700;
+}
+
+.selectedApproverChip button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .approvalInfoGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.smallButton:disabled,
+.addButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.approvalNotice {
+  width: 100%;
+  margin: 0;
+  color: #8a5a00;
+  font-size: 13px;
+  font-weight: 700;
+}

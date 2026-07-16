@@ -10,11 +10,6 @@ type ProjectRow = {
   name: string;
   client_id: string | null;
   payment_due_date: string | null;
-  planned_cost_approval_status: number | null;
-  planned_cost_requested_at: string | null;
-  planned_cost_reviewed_at: string | null;
-  planned_cost_reviewed_by: string | null;
-  planned_cost_requested_by: string | null;
 };
 
 type ClientRow = {
@@ -22,38 +17,40 @@ type ClientRow = {
   name: string;
 };
 
-type PlannedCostRow = {
-  id: string;
-  project_id: string;
-  category: number;
-  operating_person_months: number | string | null;
-  amount: number | string | null;
-};
-
 type ProfileRow = {
   id: string;
+  email: string | null;
+  last_name: string | null;
+  first_name: string | null;
   is_admin: number | boolean | null;
 };
 
-type TeamLeaderRow = {
-  team_id: string;
-  profile_id: string;
-};
-
-type ProfileTeamRow = {
-  profile_id: string;
-  team_id: string;
-};
-
-type TeamRow = {
+type PlannedCostRequestRow = {
   id: string;
-  parent_id: string | null;
+  project_id: string;
+  requested_by: string | null;
+  requested_at: string;
+  approval_status: number;
+  completed_at: string | null;
+  planned_labor_person_months: number | string | null;
+  planned_labor_amount: number | string | null;
 };
 
-type RequestRow = ProjectRow & {
+type PlannedCostRequestApproverRow = {
+  id: string;
+  request_id: string;
+  approver_profile_id: string;
+  approval_status: number;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+};
+
+type RequestRow = PlannedCostRequestRow & {
+  project: ProjectRow | null;
   clientName: string;
-  plannedLaborAmount: number;
-  plannedLaborPersonDays: number;
+  approverText: string;
+  myApprovalStatus: number | null;
+  isMyApprovalPending: boolean;
 };
 
 const PLANNED_COST_APPROVAL_STATUS = {
@@ -112,13 +109,16 @@ function formatYen(value: number | string | null | undefined) {
   return `¥${Math.round(num).toLocaleString("ja-JP")}`;
 }
 
-function formatPersonDays(value: number) {
-  return `${Number(value.toFixed(2)).toLocaleString("ja-JP")}人日`;
+function formatPersonMonths(value: number | string | null | undefined) {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return "-";
+  return `${Number(num.toFixed(2)).toLocaleString("ja-JP")}人月`;
 }
 
-function toSafeNumber(value: number | string | null | undefined) {
-  const num = Number(value ?? 0);
-  return Number.isFinite(num) ? num : 0;
+function fullName(profile?: ProfileRow | null) {
+  if (!profile) return "-";
+  const name = `${profile.last_name ?? ""}${profile.first_name ?? ""}`.trim();
+  return name || profile.email || "-";
 }
 
 function getStatusClass(status: number | null | undefined) {
@@ -139,60 +139,57 @@ export default function ProjectRequestClient() {
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isTeamLeader, setIsTeamLeader] = useState(false);
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
+  const [requests, setRequests] = useState<PlannedCostRequestRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
-  const [plannedCosts, setPlannedCosts] = useState<PlannedCostRow[]>([]);
-  const [requesterProfileTeams, setRequesterProfileTeams] = useState<ProfileTeamRow[]>([]);
-  const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [leaderTeamIds, setLeaderTeamIds] = useState<Set<string>>(new Set());
-  const [actionProjectId, setActionProjectId] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [approvers, setApprovers] = useState<PlannedCostRequestApproverRow[]>([]);
+  const [actionRequestId, setActionRequestId] = useState<string | null>(null);
+
+  const resolveCurrentProfile = useCallback(async () => {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw new Error(authError.message);
+
+    const userId = authData.user?.id;
+    const userEmail = authData.user?.email;
+    if (!userId) throw new Error("ログインユーザーを取得できません。");
+
+    const { data: profileById, error: profileByIdError } = await supabase
+      .from("profiles_2")
+      .select("id,email,last_name,first_name,is_admin")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileByIdError) throw new Error(profileByIdError.message);
+    if (profileById) return profileById as ProfileRow;
+
+    if (!userEmail) throw new Error("ログインユーザーのメールアドレスを取得できません。");
+
+    const { data: profileByEmail, error: profileByEmailError } = await supabase
+      .from("profiles_2")
+      .select("id,email,last_name,first_name,is_admin")
+      .ilike("email", userEmail)
+      .maybeSingle();
+
+    if (profileByEmailError) throw new Error(profileByEmailError.message);
+    if (!profileByEmail) throw new Error("ログインユーザーに対応する社員プロフィールが見つかりません。");
+
+    return profileByEmail as ProfileRow;
+  }, [supabase]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
+      const currentProfile = await resolveCurrentProfile();
+      const nextIsAdmin = currentProfile.is_admin === true || currentProfile.is_admin === 1;
 
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
-
-      const [
-        { data: profileData, error: profileError },
-        { data: teamLeaderData, error: teamLeaderError },
-      ] = await Promise.all([
-        supabase
-          .from("profiles_2")
-          .select("id,is_admin")
-          .eq("id", userId)
-          .maybeSingle(),
-        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", userId),
-      ]);
-
-      if (profileError) throw new Error(profileError.message);
-      if (teamLeaderError) throw new Error(teamLeaderError.message);
-
-      const profile = (profileData ?? null) as ProfileRow | null;
-      const nextIsAdmin = profile?.is_admin === true || profile?.is_admin === 1;
-      const nextLeaderTeamIds = new Set(((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id));
-      const nextIsTeamLeader = nextLeaderTeamIds.size > 0;
-
+      setCurrentProfileId(currentProfile.id);
       setIsAdmin(nextIsAdmin);
-      setIsTeamLeader(nextIsTeamLeader);
-      setLeaderTeamIds(nextLeaderTeamIds);
-
-      if (!nextIsAdmin && !nextIsTeamLeader) {
-        setProjects([]);
-        setClients([]);
-        setPlannedCosts([]);
-        setRequesterProfileTeams([]);
-        setMessage("案件申請管理は管理者または所属組織リーダーのみ利用できます。");
-        return;
-      }
 
       const monthStart = getMonthStart(displayMonth);
       const monthEnd = getMonthEnd(displayMonth);
@@ -200,154 +197,123 @@ export default function ProjectRequestClient() {
       const to = `${getDateKey(new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + 1))}T00:00:00+09:00`;
 
       const [
-        { data: projectData, error: projectError },
+        { data: requestData, error: requestError },
         { data: clientData, error: clientError },
-        { data: teamData, error: teamError },
+        { data: profileData, error: profileError },
       ] = await Promise.all([
-          supabase
-            .from("project")
-            .select(
-              "id,name,client_id,payment_due_date,planned_cost_approval_status,planned_cost_requested_at,planned_cost_reviewed_at,planned_cost_reviewed_by,planned_cost_requested_by"
-            )
-            .in("planned_cost_approval_status", [
-              PLANNED_COST_APPROVAL_STATUS.pending,
-              PLANNED_COST_APPROVAL_STATUS.approved,
-              PLANNED_COST_APPROVAL_STATUS.rejected,
-              PLANNED_COST_APPROVAL_STATUS.canceled,
-            ])
-            .gte("planned_cost_requested_at", from)
-            .lt("planned_cost_requested_at", to)
-            .order("planned_cost_requested_at", { ascending: false }),
-          supabase.from("client").select("id,name"),
-          supabase.from("team").select("id,parent_id"),
-        ]);
+        supabase
+          .from("project_planned_cost_request")
+          .select("id,project_id,requested_by,requested_at,approval_status,completed_at,planned_labor_person_months,planned_labor_amount")
+          .gte("requested_at", from)
+          .lt("requested_at", to)
+          .order("requested_at", { ascending: false }),
+        supabase.from("client").select("id,name"),
+        supabase.from("profiles_2").select("id,email,last_name,first_name,is_admin"),
+      ]);
 
-      if (projectError) throw new Error(projectError.message);
+      if (requestError) throw new Error(requestError.message);
       if (clientError) throw new Error(clientError.message);
-      if (teamError) throw new Error(teamError.message);
+      if (profileError) throw new Error(profileError.message);
 
-      const nextProjects = (projectData ?? []) as ProjectRow[];
-      setProjects(nextProjects);
+      const nextRequests = (requestData ?? []) as PlannedCostRequestRow[];
+      setRequests(nextRequests);
       setClients((clientData ?? []) as ClientRow[]);
-      setTeams((teamData ?? []) as TeamRow[]);
+      setProfiles((profileData ?? []) as ProfileRow[]);
 
-      const requesterIds = Array.from(new Set(nextProjects.map((project) => project.planned_cost_requested_by).filter(Boolean))) as string[];
-      if (requesterIds.length > 0) {
-        const { data: requesterTeamData, error: requesterTeamError } = await supabase
-          .from("profile_team")
-          .select("profile_id,team_id")
-          .in("profile_id", requesterIds);
-        if (requesterTeamError) throw new Error(requesterTeamError.message);
-        setRequesterProfileTeams((requesterTeamData ?? []) as ProfileTeamRow[]);
-      } else {
-        setRequesterProfileTeams([]);
+      const requestIds = nextRequests.map((request) => request.id);
+      const projectIds = Array.from(new Set(nextRequests.map((request) => request.project_id)));
+
+      if (requestIds.length === 0) {
+        setProjects([]);
+        setApprovers([]);
+        return;
       }
 
-      const projectIds = nextProjects.map((project) => project.id);
-      if (projectIds.length === 0) {
-        setPlannedCosts([]);
-      } else {
-        const { data: plannedCostData, error: plannedCostError } = await supabase
-          .from("project_planned_cost")
-          .select("id,project_id,category,operating_person_months,amount")
-          .eq("category", 2)
-          .in("project_id", projectIds);
+      const [
+        { data: approverData, error: approverError },
+        { data: projectData, error: projectError },
+      ] = await Promise.all([
+        supabase
+          .from("project_planned_cost_request_approver")
+          .select("id,request_id,approver_profile_id,approval_status,reviewed_at,reviewed_by")
+          .in("request_id", requestIds),
+        supabase
+          .from("project")
+          .select("id,name,client_id,payment_due_date")
+          .in("id", projectIds),
+      ]);
 
-        if (plannedCostError) throw new Error(plannedCostError.message);
-        setPlannedCosts((plannedCostData ?? []) as PlannedCostRow[]);
-      }
+      if (approverError) throw new Error(approverError.message);
+      if (projectError) throw new Error(projectError.message);
+
+      setApprovers((approverData ?? []) as PlannedCostRequestApproverRow[]);
+      setProjects((projectData ?? []) as ProjectRow[]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
     }
-  }, [displayMonth, supabase]);
+  }, [displayMonth, resolveCurrentProfile, supabase]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const leaderEffectiveTeamIds = useMemo(() => {
-    const result = new Set(leaderTeamIds);
-    const childrenByParent = new Map<string | null, TeamRow[]>();
-
-    for (const team of teams) {
-      const parentId = team.parent_id ?? null;
-      if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
-      childrenByParent.get(parentId)!.push(team);
-    }
-
-    const walk = (teamId: string) => {
-      for (const child of childrenByParent.get(teamId) ?? []) {
-        if (result.has(child.id)) continue;
-        result.add(child.id);
-        walk(child.id);
-      }
-    };
-
-    for (const teamId of leaderTeamIds) {
-      walk(teamId);
-    }
-
-    return result;
-  }, [leaderTeamIds, teams]);
-
-  const leaderManagedRequesterIds = useMemo(() => {
-    const result = new Set<string>();
-    if (leaderEffectiveTeamIds.size === 0) return result;
-
-    for (const relation of requesterProfileTeams) {
-      if (leaderEffectiveTeamIds.has(relation.team_id)) {
-        result.add(relation.profile_id);
-      }
-    }
-
-    return result;
-  }, [leaderEffectiveTeamIds, requesterProfileTeams]);
-
-  const canReviewProject = useCallback(
-    (project: ProjectRow) => {
-      if (isAdmin) return true;
-      if (!project.planned_cost_requested_by) return false;
-      return leaderManagedRequesterIds.has(project.planned_cost_requested_by);
-    },
-    [isAdmin, leaderManagedRequesterIds]
-  );
-
   const clientMap = useMemo(() => new Map(clients.map((client) => [client.id, client.name])), [clients]);
+  const profileMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
+  const projectMap = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
+
+  const approversByRequest = useMemo(() => {
+    const map = new Map<string, PlannedCostRequestApproverRow[]>();
+    for (const approver of approvers) {
+      const list = map.get(approver.request_id) ?? [];
+      list.push(approver);
+      map.set(approver.request_id, list);
+    }
+    return map;
+  }, [approvers]);
 
   const rows = useMemo<RequestRow[]>(() => {
-    const costMap = new Map<string, { amount: number; personDays: number }>();
+    return requests
+      .map((request) => {
+        const project = projectMap.get(request.project_id) ?? null;
+        const requestApprovers = approversByRequest.get(request.id) ?? [];
+        const myApproval = currentProfileId
+          ? requestApprovers.find((approver) => approver.approver_profile_id === currentProfileId) ?? null
+          : null;
 
-    for (const cost of plannedCosts) {
-      const current = costMap.get(cost.project_id) ?? { amount: 0, personDays: 0 };
-      current.amount += toSafeNumber(cost.amount);
-      current.personDays += toSafeNumber(cost.operating_person_months);
-      costMap.set(cost.project_id, current);
-    }
+        return {
+          ...request,
+          project,
+          clientName: project?.client_id ? clientMap.get(project.client_id) ?? "-" : "-",
+          approverText: requestApprovers.length
+            ? requestApprovers
+                .map((approver) => {
+                  const name = fullName(profileMap.get(approver.approver_profile_id));
+                  const status = APPROVAL_STATUS_LABELS[approver.approval_status] ?? "-";
+                  return `${name}（${status}）`;
+                })
+                .join("、")
+            : "-",
+          myApprovalStatus: myApproval?.approval_status ?? null,
+          isMyApprovalPending: myApproval?.approval_status === PLANNED_COST_APPROVAL_STATUS.pending,
+        };
+      })
+      .filter((row) => isAdmin || row.myApprovalStatus !== null);
+  }, [approversByRequest, clientMap, currentProfileId, isAdmin, profileMap, projectMap, requests]);
 
-    return projects.filter((project) => canReviewProject(project)).map((project) => {
-      const cost = costMap.get(project.id) ?? { amount: 0, personDays: 0 };
-      return {
-        ...project,
-        clientName: project.client_id ? clientMap.get(project.client_id) ?? "-" : "-",
-        plannedLaborAmount: cost.amount,
-        plannedLaborPersonDays: cost.personDays,
-      };
-    });
-  }, [canReviewProject, clientMap, plannedCosts, projects]);
+  const updateApprovalStatus = async (requestId: string, projectId: string, status: number) => {
+    const targetRow = rows.find((row) => row.id === requestId);
+    if (!targetRow || actionRequestId || !targetRow.isMyApprovalPending) return;
 
-  const updateApprovalStatus = async (projectId: string, status: number) => {
-    const targetProject = projects.find((project) => project.id === projectId);
-    if (!targetProject || !canReviewProject(targetProject) || actionProjectId) return;
-
-    setActionProjectId(projectId);
+    setActionRequestId(requestId);
     setMessage("");
 
     try {
       const { error } = await supabase.rpc("review_project_planned_cost", {
         target_project_id: projectId,
         target_approval_status: status,
+        target_request_id: requestId,
       });
 
       if (error) throw new Error(error.message);
@@ -356,7 +322,7 @@ export default function ProjectRequestClient() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setActionProjectId(null);
+      setActionRequestId(null);
     }
   };
 
@@ -400,6 +366,7 @@ export default function ProjectRequestClient() {
                 <th>支払期日</th>
                 <th>予定工数</th>
                 <th>予定工数金額</th>
+                <th>承認者</th>
                 <th>ステータス</th>
                 <th>操作</th>
               </tr>
@@ -407,40 +374,39 @@ export default function ProjectRequestClient() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className={styles.emptyCell}>
+                  <td colSpan={9} className={styles.emptyCell}>
                     読み込み中...
-                  </td>
-                </tr>
-              ) : !isAdmin && !isTeamLeader ? (
-                <tr>
-                  <td colSpan={8} className={styles.emptyCell}>
-                    管理者または所属組織リーダーのみ利用できます。
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className={styles.emptyCell}>
+                  <td colSpan={9} className={styles.emptyCell}>
                     申請データがありません。
                   </td>
                 </tr>
               ) : (
-                rows.map((project) => {
-                  const disabled = actionProjectId === project.id || !canReviewProject(project);
+                rows.map((request) => {
+                  const disabled = actionRequestId === request.id || !request.isMyApprovalPending;
                   return (
-                    <tr key={project.id}>
-                      <td>{formatDateTime(project.planned_cost_requested_at)}</td>
+                    <tr key={request.id}>
+                      <td>{formatDateTime(request.requested_at)}</td>
                       <td>
-                        <Link href={`/project/${project.id}`} className={styles.projectLink}>
-                          {project.name}
-                        </Link>
+                        {request.project ? (
+                          <Link href={`/project/${request.project.id}`} className={styles.projectLink}>
+                            {request.project.name}
+                          </Link>
+                        ) : (
+                          "-"
+                        )}
                       </td>
-                      <td>{project.clientName}</td>
-                      <td>{formatDate(project.payment_due_date)}</td>
-                      <td>{formatPersonDays(project.plannedLaborPersonDays)}</td>
-                      <td>{formatYen(project.plannedLaborAmount)}</td>
+                      <td>{request.clientName}</td>
+                      <td>{formatDate(request.project?.payment_due_date)}</td>
+                      <td>{formatPersonMonths(request.planned_labor_person_months)}</td>
+                      <td>{formatYen(request.planned_labor_amount)}</td>
+                      <td className={styles.approverCell}>{request.approverText}</td>
                       <td>
-                        <span className={`${styles.statusBadge} ${getStatusClass(project.planned_cost_approval_status)}`}>
-                          {APPROVAL_STATUS_LABELS[project.planned_cost_approval_status ?? 0] ?? "-"}
+                        <span className={`${styles.statusBadge} ${getStatusClass(request.approval_status)}`}>
+                          {APPROVAL_STATUS_LABELS[request.approval_status] ?? "-"}
                         </span>
                       </td>
                       <td>
@@ -448,7 +414,7 @@ export default function ProjectRequestClient() {
                           <button
                             type="button"
                             className={styles.approveButton}
-                            onClick={() => updateApprovalStatus(project.id, PLANNED_COST_APPROVAL_STATUS.approved)}
+                            onClick={() => updateApprovalStatus(request.id, request.project_id, PLANNED_COST_APPROVAL_STATUS.approved)}
                             disabled={disabled}
                           >
                             承認
@@ -456,7 +422,7 @@ export default function ProjectRequestClient() {
                           <button
                             type="button"
                             className={styles.rejectButton}
-                            onClick={() => updateApprovalStatus(project.id, PLANNED_COST_APPROVAL_STATUS.rejected)}
+                            onClick={() => updateApprovalStatus(request.id, request.project_id, PLANNED_COST_APPROVAL_STATUS.rejected)}
                             disabled={disabled}
                           >
                             却下
@@ -464,7 +430,7 @@ export default function ProjectRequestClient() {
                           <button
                             type="button"
                             className={styles.cancelButton}
-                            onClick={() => updateApprovalStatus(project.id, PLANNED_COST_APPROVAL_STATUS.canceled)}
+                            onClick={() => updateApprovalStatus(request.id, request.project_id, PLANNED_COST_APPROVAL_STATUS.canceled)}
                             disabled={disabled}
                           >
                             取消

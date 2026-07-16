@@ -425,18 +425,20 @@ export default function SalesSummaryClient() {
         const latestSnapshotDates = await fetchLatestSnapshotDates();
 
         const [projectRows, snapshotRows, clientRows, profileRows] = await Promise.all([
-          fetchAllPages<ProjectRow>((from, to) =>
-            supabase
+          fetchAllPages<ProjectRow>(async (from, to) => {
+            const result = await supabase
               .from("project")
               .select("id,name,client_id,project_manager_id,status,invoice_amount,created_at")
               .order("created_at", { ascending: false })
               .order("id", { ascending: true })
-              .range(from, to)
-          ),
+              .range(from, to);
+
+            return result as SupabasePageResult<ProjectRow>;
+          }),
           latestSnapshotDates.length === 0
             ? Promise.resolve([] as SnapshotRow[])
-            : fetchAllPages<SnapshotRow>((from, to) =>
-                supabase
+            : fetchAllPages<SnapshotRow>(async (from, to) => {
+                const result = await supabase
                   .from("project_sales_weekly_snapshot")
                   .select(
                     "id,project_id,name,client_id,project_manager_id,status,invoice_amount,project_created_at,week_end_date"
@@ -444,24 +446,30 @@ export default function SalesSummaryClient() {
                   .in("week_end_date", latestSnapshotDates)
                   .order("week_end_date", { ascending: false })
                   .order("project_id", { ascending: true })
-                  .range(from, to)
-              ),
-          fetchAllPages<ClientRow>((from, to) =>
-            supabase
+                  .range(from, to);
+
+                return result as SupabasePageResult<SnapshotRow>;
+              }),
+          fetchAllPages<ClientRow>(async (from, to) => {
+            const result = await supabase
               .from("client")
               .select("id,name")
               .order("name", { ascending: true })
               .order("id", { ascending: true })
-              .range(from, to)
-          ),
-          fetchAllPages<ProfileRow>((from, to) =>
-            supabase
+              .range(from, to);
+
+            return result as SupabasePageResult<ClientRow>;
+          }),
+          fetchAllPages<ProfileRow>(async (from, to) => {
+            const result = await supabase
               .from("profiles_2")
               .select("id,last_name,first_name,email")
               .order("created_at", { ascending: true })
               .order("id", { ascending: true })
-              .range(from, to)
-          ),
+              .range(from, to);
+
+            return result as SupabasePageResult<ProfileRow>;
+          }),
         ]);
 
         setProjects(dedupeByKey(projectRows, (row) => row.id));
