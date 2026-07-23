@@ -10,28 +10,13 @@ export default async function ExpensesManagementPage() {
     redirect("/login");
   }
 
-  const [
-    { data: profile, error: profileError },
-    { data: teamLeaderData, error: teamLeaderError },
-  ] = await Promise.all([
-    supabase
-      .from("profiles_2")
-      .select("id,is_admin")
-      .eq("id", authData.user.id)
-      .maybeSingle(),
-    supabase
-      .from("team_leader")
-      .select("id")
-      .eq("profile_id", authData.user.id)
-      .limit(1),
-  ]);
+  const { data: canAccessData, error: canAccessError } = await supabase.rpc(
+    "can_access_expense_management"
+  );
 
-  const isAdmin = profile?.is_admin === 1;
-  const isTeamLeader = (teamLeaderData?.length ?? 0) > 0;
-
-  if (profileError || teamLeaderError || !profile || (!isAdmin && !isTeamLeader)) {
+  if (canAccessError || canAccessData !== true) {
     redirect("/");
   }
 
-  return <ExpensesManagementClient />;
+  return <ExpensesManagementClient initialHasApprovalAccess />;
 }

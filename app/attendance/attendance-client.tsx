@@ -90,6 +90,20 @@ type CorrectionFormState = {
   comment: string;
 };
 
+type ProfileOption = {
+  id: string;
+  last_name: string | null;
+  first_name: string | null;
+  email: string | null;
+  status?: number | null;
+  is_general_affairs_approver?: number | null;
+};
+
+type CurrentProfile = {
+  id: string;
+  email: string | null;
+};
+
 const LEAVE_TYPE_OPTIONS = [
   { value: 0, label: "有給" },
   { value: 1, label: "午前休" },
@@ -471,6 +485,15 @@ function createRequestGroupId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function getProfileDisplayName(profile: Pick<ProfileOption, "last_name" | "first_name" | "email">) {
+  const name = [profile.last_name, profile.first_name].filter(Boolean).join(" ").trim();
+  return name || profile.email || "氏名未設定";
+}
+
+function uniq(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 
 function AwayDurationCell({
   breakRows,
@@ -537,6 +560,13 @@ export default function AttendanceClient() {
     status_label: "出勤",
     comment: "",
   });
+  const [approvalFlowOpen, setApprovalFlowOpen] = useState(false);
+  const [approvalFlowLoading, setApprovalFlowLoading] = useState(false);
+  const [approvalMemberOptions, setApprovalMemberOptions] = useState<ProfileOption[]>([]);
+  const [selectedStep1ApproverIds, setSelectedStep1ApproverIds] = useState<string[]>([]);
+  const [selectedShareMemberIds, setSelectedShareMemberIds] = useState<string[]>([]);
+  const [shareMemberSearch, setShareMemberSearch] = useState("");
+  const [generalAffairsApproverCount, setGeneralAffairsApproverCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -706,6 +736,176 @@ export default function AttendanceClient() {
     };
   }, [dayRows]);
 
+  const selectedStep1Approvers = useMemo(
+    () => approvalMemberOptions.filter((profile) => selectedStep1ApproverIds.includes(profile.id)),
+    [approvalMemberOptions, selectedStep1ApproverIds]
+  );
+
+  const selectedShareMembers = useMemo(
+    () => approvalMemberOptions.filter((profile) => selectedShareMemberIds.includes(profile.id)),
+    [approvalMemberOptions, selectedShareMemberIds]
+  );
+
+  const filteredShareMemberOptions = useMemo(() => {
+    const keyword = shareMemberSearch.trim().toLowerCase();
+    const selectedSet = new Set([...selectedShareMemberIds, ...selectedStep1ApproverIds]);
+
+    return approvalMemberOptions
+      .filter((profile) => !selectedSet.has(profile.id))
+      .filter((profile) => {
+        if (!keyword) return true;
+        return `${getProfileDisplayName(profile)} ${profile.email ?? ""}`.toLowerCase().includes(keyword);
+      })
+      .slice(0, 8);
+  }, [approvalMemberOptions, selectedShareMemberIds, selectedStep1ApproverIds, shareMemberSearch]);
+
+  const resolveCurrentProfile = async (): Promise<CurrentProfile> => {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw new Error(authError.message);
+
+    const authUser = authData.user;
+    if (!authUser?.id) throw new Error("ログインユーザーを取得できません。");
+
+    const { data: profileById, error: profileByIdError } = await supabase
+      .from("profiles_2")
+      .select("id,email")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (profileByIdError) throw new Error(profileByIdError.message);
+
+    if (profileById?.id) {
+      return { id: profileById.id as string, email: (profileById.email as string | null) ?? null };
+    }
+
+    const authEmail = authUser.email?.trim();
+    if (!authEmail) {
+      return { id: authUser.id, email: null };
+    }
+
+    const { data: profileByEmail, error: profileByEmailError } = await supabase
+      .from("profiles_2")
+      .select("id,email")
+      .ilike("email", authEmail)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (profileByEmailError) throw new Error(profileByEmailError.message);
+
+    return {
+      id: (profileByEmail?.id as string | undefined) ?? authUser.id,
+      email: (profileByEmail?.email as string | null | undefined) ?? authEmail,
+    };
+  };
+
+  const loadApprovalFlowOptions = async () => {
+    setApprovalFlowLoading(true);
+
+    try {
+      const currentProfile = await resolveCurrentProfile();
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles_2")
+        .select("id,last_name,first_name,email,status,is_general_affairs_approver")
+        .eq("status", 0)
+        .order("last_name", { ascending: true })
+        .order("first_name", { ascending: true });
+
+      if (profilesError) throw new Error(profilesError.message);
+
+      const profiles = ((profilesData ?? []) as ProfileOption[]).filter((profile) => profile.id !== currentProfile.id);
+      setApprovalMemberOptions(profiles);
+      setGeneralAffairsApproverCount(
+        ((profilesData ?? []) as ProfileOption[]).filter((profile) => Number(profile.is_general_affairs_approver ?? 0) === 1)
+          .length
+      );
+
+      const { data: profileTeamData, error: profileTeamError } = await supabase
+        .from("profile_team")
+        .select("team_id")
+        .eq("profile_id", currentProfile.id);
+
+      if (profileTeamError) throw new Error(profileTeamError.message);
+
+      const teamIds = uniq(((profileTeamData ?? []) as { team_id: string | null }[]).map((row) => row.team_id ?? ""));
+
+      if (teamIds.length === 0) {
+        setSelectedStep1ApproverIds([]);
+        return;
+      }
+
+      const { data: teamLeaderData, error: teamLeaderError } = await supabase
+        .from("team_leader")
+        .select("profile_id")
+        .in("team_id", teamIds);
+
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
+
+      const leaderIds = uniq(
+        ((teamLeaderData ?? []) as { profile_id: string | null }[])
+          .map((row) => row.profile_id ?? "")
+          .filter((id) => id !== currentProfile.id)
+      );
+
+      if (leaderIds.length === 0) {
+        setSelectedStep1ApproverIds([]);
+        return;
+      }
+
+      const { data: leaderData, error: leaderError } = await supabase
+        .from("profiles_2")
+        .select("id,last_name,first_name,email,status")
+        .in("id", leaderIds);
+
+      if (leaderError) throw new Error(leaderError.message);
+
+      const activeLeaderIds = ((leaderData ?? []) as ProfileOption[])
+        .filter((profile) => Number(profile.status ?? 0) === 0)
+        .map((profile) => profile.id);
+      setSelectedStep1ApproverIds(activeLeaderIds);
+    } finally {
+      setApprovalFlowLoading(false);
+    }
+  };
+
+  const validateAttendanceCorrectionForm = () => {
+    if (!editTarget) throw new Error("修正対象日を取得できません。");
+
+    const awayMinutes = parseDurationFieldsToMinutes(editForm.away_hours, editForm.away_minutes);
+    if (awayMinutes == null) {
+      throw new Error("離席時間は時間と分を半角数字で入力してください。分は0〜59で入力してください。");
+    }
+
+    const startMinutes = parseTimeToMinutes(editForm.start_time || null);
+    const endMinutes = parseTimeToMinutes(editForm.end_time || null);
+    if (startMinutes != null && endMinutes != null && endMinutes < startMinutes) {
+      throw new Error("退勤時刻は出勤時刻以降を入力してください。");
+    }
+
+    return {
+      awayMinutes,
+      requestedStatusLabel: normalizeCorrectionStatusLabel(editForm.status_label),
+    };
+  };
+
+  const openApprovalFlowModal = async () => {
+    if (!editTarget) return;
+
+    setMessage("");
+
+    try {
+      validateAttendanceCorrectionForm();
+      setSelectedStep1ApproverIds([]);
+      setSelectedShareMemberIds([]);
+      setShareMemberSearch("");
+      await loadApprovalFlowOptions();
+      setApprovalFlowOpen(true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const openEditModal = (row: DayRow) => {
     if (row.isFuture || row.hasPendingRequest) return;
 
@@ -723,6 +923,10 @@ export default function AttendanceClient() {
 
   const closeEditModal = () => {
     if (requestSaving) return;
+    setApprovalFlowOpen(false);
+    setSelectedStep1ApproverIds([]);
+    setSelectedShareMemberIds([]);
+    setShareMemberSearch("");
     setEditTarget(null);
   };
 
@@ -761,38 +965,34 @@ export default function AttendanceClient() {
         return;
       }
 
-      const awayMinutes = parseDurationFieldsToMinutes(editForm.away_hours, editForm.away_minutes);
-      if (awayMinutes == null) {
-        throw new Error("離席時間は時間と分を半角数字で入力してください。分は0〜59で入力してください。");
+      const { awayMinutes, requestedStatusLabel } = validateAttendanceCorrectionForm();
+      const step1ApproverIds = uniq([...selectedStep1ApproverIds, ...selectedShareMemberIds]);
+      if (step1ApproverIds.length === 0) {
+        throw new Error("STEP 1 または共有先に承認者を1名以上選択してください。");
       }
 
-      const startMinutes = parseTimeToMinutes(editForm.start_time || null);
-      const endMinutes = parseTimeToMinutes(editForm.end_time || null);
-      if (startMinutes != null && endMinutes != null && endMinutes < startMinutes) {
-        throw new Error("退勤時刻は出勤時刻以降を入力してください。");
-      }
-
-      const requestedStatusLabel = normalizeCorrectionStatusLabel(editForm.status_label);
-
-      const { error } = await supabase.from("attendance_correction_request").insert({
-        profile_id: userId,
-        work_date: editForm.work_date,
-        before_start_time: editTarget.startTime ? editTarget.startTime.slice(0, 8) : null,
-        before_end_time: editTarget.endTime ? editTarget.endTime.slice(0, 8) : null,
-        before_away_minutes: editTarget.awayMinutes ?? 0,
-        before_status_label: editTarget.statusLabel || null,
-        requested_start_time: editForm.start_time || null,
-        requested_end_time: editForm.end_time || null,
-        requested_away_minutes: awayMinutes,
-        requested_status_label: requestedStatusLabel,
-        comment: editForm.comment.trim() || null,
-        approval_status: APPROVAL_STATUS.pending,
-        requested_by: userId,
+      const { error } = await supabase.rpc("create_attendance_correction_request_with_flow", {
+        target_work_date: editForm.work_date,
+        target_before_start_time: editTarget.startTime ? editTarget.startTime.slice(0, 8) : null,
+        target_before_end_time: editTarget.endTime ? editTarget.endTime.slice(0, 8) : null,
+        target_before_away_minutes: editTarget.awayMinutes ?? 0,
+        target_before_status_label: editTarget.statusLabel || null,
+        target_requested_start_time: editForm.start_time || null,
+        target_requested_end_time: editForm.end_time || null,
+        target_requested_away_minutes: awayMinutes,
+        target_requested_status_label: requestedStatusLabel,
+        target_comment: editForm.comment.trim() || null,
+        target_step1_approver_profile_ids: step1ApproverIds,
+        target_shared_profile_ids: [],
       });
 
       if (error) throw new Error(error.message);
 
+      setApprovalFlowOpen(false);
       setEditTarget(null);
+      setSelectedStep1ApproverIds([]);
+      setSelectedShareMemberIds([]);
+      setShareMemberSearch("");
       setRequestCompleteMessage("打刻修正申請が完了しました");
       setRequestCompleteOpen(true);
       await load();
@@ -1094,8 +1294,147 @@ export default function AttendanceClient() {
               <button
                 type="button"
                 className={styles.modalSaveButton}
-                onClick={submitCorrectionRequest}
+                onClick={isLeaveSelected ? submitCorrectionRequest : openApprovalFlowModal}
+                disabled={requestSaving || approvalFlowLoading}
+              >
+                {requestSaving || approvalFlowLoading ? "処理中..." : isLeaveSelected ? "申請する" : "次へ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {approvalFlowOpen && editTarget && (
+        <div className={styles.modalOverlay} onClick={() => !requestSaving && setApprovalFlowOpen(false)}>
+          <div
+            className={`${styles.modalCard} ${styles.approvalFlowModalCard}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className={styles.modalTitle}>承認フローの確認</h2>
+
+            <div className={styles.approvalFlowBody}>
+              <section className={styles.approvalFlowSection}>
+                <h3 className={styles.approvalFlowHeading}>承認フロー（必須）</h3>
+                <p className={styles.approvalFlowDescription}>この申請は以下の順で承認されます</p>
+
+                <div className={styles.approvalFlowSteps}>
+                  <div className={`${styles.approvalFlowStepCard} ${styles.step1ApproverCard}`}>
+                    <span className={styles.approvalFlowStepLabel}>STEP 1</span>
+                    <div className={styles.step1ApproverArea}>
+                      {selectedStep1Approvers.length === 0 && (
+                        <span className={styles.step1EmptyText}>未選択</span>
+                      )}
+
+                      {selectedStep1Approvers.map((profile) => (
+                        <span key={profile.id} className={styles.shareMemberChip}>
+                          {getProfileDisplayName(profile)}
+                          <button
+                            type="button"
+                            className={styles.shareMemberRemoveButton}
+                            onClick={() =>
+                              setSelectedStep1ApproverIds((current) => current.filter((id) => id !== profile.id))
+                            }
+                            aria-label={`${getProfileDisplayName(profile)}をSTEP 1承認者から削除`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.approvalFlowArrow}>→</div>
+                  <div className={styles.approvalFlowStepCard}>
+                    <span className={styles.approvalFlowStepLabel}>STEP 2</span>
+                    <span className={styles.approvalFlowStepName}>総務部</span>
+                  </div>
+                </div>
+
+                <p className={styles.approvalFlowNote}>
+                  ※ 上長の承認後に総務承認者へ通知されます
+                </p>
+                {selectedStep1ApproverIds.length === 0 && selectedShareMemberIds.length === 0 && (
+                  <p className={styles.approvalFlowWarning}>
+                    STEP 1 または共有先に承認者を1名以上選択してください。
+                  </p>
+                )}
+                {generalAffairsApproverCount === 0 && (
+                  <p className={styles.approvalFlowWarning}>
+                    総務承認者権限を持つ社員が設定されていません。社員管理画面で総務承認者を設定してください。
+                  </p>
+                )}
+              </section>
+
+              <section className={styles.approvalFlowSection}>
+                <h3 className={styles.approvalFlowHeading}>共有先（任意）</h3>
+                <p className={styles.approvalFlowDescription}>
+                  STEP 1の上長以外に承認が必要なメンバーを追加できます
+                </p>
+
+                <div className={styles.shareMemberArea}>
+                  {selectedShareMembers.map((profile) => (
+                    <span key={profile.id} className={styles.shareMemberChip}>
+                      {getProfileDisplayName(profile)}
+                      <button
+                        type="button"
+                        className={styles.shareMemberRemoveButton}
+                        onClick={() =>
+                          setSelectedShareMemberIds((current) => current.filter((id) => id !== profile.id))
+                        }
+                        aria-label={`${getProfileDisplayName(profile)}を共有先から削除`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+
+                  <div className={styles.shareMemberPicker}>
+                    <input
+                      type="text"
+                      value={shareMemberSearch}
+                      onChange={(event) => setShareMemberSearch(event.target.value)}
+                      className={styles.shareMemberSearchInput}
+                      placeholder="名前で検索"
+                    />
+                    {shareMemberSearch.trim() !== "" && filteredShareMemberOptions.length > 0 && (
+                      <div className={styles.shareMemberDropdown}>
+                        {filteredShareMemberOptions.map((profile) => (
+                          <button
+                            key={profile.id}
+                            type="button"
+                            className={styles.shareMemberOption}
+                            onClick={() => {
+                              setSelectedShareMemberIds((current) => uniq([...current, profile.id]));
+                              setShareMemberSearch("");
+                            }}
+                          >
+                            {getProfileDisplayName(profile)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div className={styles.modalActionRow}>
+              <button
+                type="button"
+                className={styles.modalCancelButton}
+                onClick={() => setApprovalFlowOpen(false)}
                 disabled={requestSaving}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.modalSaveButton}
+                onClick={submitCorrectionRequest}
+                disabled={
+                  requestSaving ||
+                  (selectedStep1ApproverIds.length === 0 && selectedShareMemberIds.length === 0) ||
+                  generalAffairsApproverCount === 0
+                }
               >
                 {requestSaving ? "申請中..." : "申請する"}
               </button>

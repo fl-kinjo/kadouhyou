@@ -510,3 +510,202 @@
 .durationInput {
   width: 96px;
 }
+
+.approvalFlowModalCard {
+  max-width: 680px;
+}
+
+.approvalFlowBody {
+  margin-top: 24px;
+  display: grid;
+  gap: 20px;
+}
+
+.approvalFlowSection {
+  display: grid;
+  gap: 10px;
+}
+
+.approvalFlowHeading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: #111;
+}
+
+.approvalFlowDescription {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #666;
+  line-height: 1.6;
+}
+
+.approvalFlowSteps {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.approvalFlowStepCard {
+  min-width: 190px;
+  min-height: 62px;
+  border: 1px solid #c5c5c5;
+  border-radius: 5px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  display: grid;
+  gap: 8px;
+  background: #fff;
+}
+
+
+.step1ApproverCard {
+  min-width: 300px;
+}
+
+.step1ApproverArea {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.step1EmptyText {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  color: #777;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.approvalFlowStepLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: #888;
+}
+
+.approvalFlowStepName {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #222;
+}
+
+.approvalFlowArrow {
+  font-size: 24px;
+  line-height: 1;
+  color: #555;
+}
+
+.approvalFlowNote,
+.approvalFlowWarning {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.approvalFlowNote {
+  color: #666;
+}
+
+.approvalFlowWarning {
+  color: #b00020;
+  font-weight: 800;
+}
+
+.shareMemberArea {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shareMemberChip {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.shareMemberRemoveButton {
+  border: none;
+  background: transparent;
+  color: #555;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.shareMemberPicker {
+  position: relative;
+  min-width: 190px;
+}
+
+.shareMemberSearchInput {
+  width: 100%;
+  height: 36px;
+  border: 1px dashed #c5c5c5;
+  border-radius: 999px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.shareMemberDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 240px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  z-index: 1002;
+}
+
+.shareMemberOption {
+  width: 100%;
+  min-height: 36px;
+  border: none;
+  background: #fff;
+  text-align: left;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.shareMemberOption:hover {
+  background: #f4f4f4;
+}
+
+@media (max-width: 640px) {
+  .approvalFlowSteps {
+    display: grid;
+  }
+
+  .approvalFlowArrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+
+  .approvalFlowStepCard,
+  .step1ApproverCard,
+  .shareMemberPicker,
+  .shareMemberDropdown {
+    width: 100%;
+  }
+}

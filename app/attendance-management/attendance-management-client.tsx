@@ -33,6 +33,29 @@ type AttendanceCorrectionRequestRow = {
   requested_at: string;
 };
 
+type ApprovalRequestRow = {
+  id: string;
+  request_type: string;
+  target_id: string;
+  applicant_profile_id: string;
+  status: number;
+  current_step_no: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
+type ApprovalRequestStepRow = {
+  id: string;
+  approval_request_id: string;
+  step_no: number;
+  step_name: string;
+  approver_type: string;
+  approver_profile_id: string | null;
+  approval_status: number;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+};
+
 type ProfileRow = {
   id: string;
   last_name: string | null;
@@ -84,6 +107,7 @@ type AttendanceBreakRow = {
 type GroupedLeaveRequest = {
   requestGroupId: string;
   profileId: string;
+  approvalFlow: ApprovalRequestRow | null;
   applicantName: string;
   createdAt: string;
   comment: string;
@@ -100,6 +124,7 @@ type GroupedLeaveRequest = {
 type CorrectionRequestCard = {
   id: string;
   profileId: string;
+  approvalFlow: ApprovalRequestRow | null;
   applicantName: string;
   requestedAt: string;
   workDate: string;
@@ -143,6 +168,21 @@ const APPROVAL_STATUS_LABELS: Record<number, string> = {
   1: "承認済み",
   2: "却下",
   3: "取消",
+};
+
+const APPROVAL_FLOW_STATUS_LABELS: Record<number, string> = {
+  1: "上長承認待ち",
+  2: "総務承認待ち",
+  3: "承認済み",
+  4: "却下",
+  5: "取消",
+};
+
+const APPROVAL_STEP_STATUS_LABELS: Record<number, string> = {
+  1: "未承認",
+  2: "承認済み",
+  3: "却下",
+  4: "取消",
 };
 
 function formatDateJP(dateText: string) {
@@ -194,6 +234,34 @@ function getStatusClass(status: number) {
     default:
       return styles.statusPending;
   }
+}
+
+function getApprovalFlowStatusClass(status: number) {
+  switch (status) {
+    case 3:
+      return styles.statusApproved;
+    case 4:
+    case 5:
+      return styles.statusRejected;
+    default:
+      return styles.statusPending;
+  }
+}
+
+function getDisplayApprovalLabel(legacyStatus: number, approvalFlow: ApprovalRequestRow | null) {
+  if (approvalFlow) {
+    return APPROVAL_FLOW_STATUS_LABELS[approvalFlow.status] ?? String(approvalFlow.status);
+  }
+  return APPROVAL_STATUS_LABELS[legacyStatus] ?? String(legacyStatus);
+}
+
+function getDisplayStatusClass(legacyStatus: number, approvalFlow: ApprovalRequestRow | null) {
+  if (approvalFlow) return getApprovalFlowStatusClass(approvalFlow.status);
+  return getStatusClass(legacyStatus);
+}
+
+function getApprovalTargetKey(requestType: string, targetId: string) {
+  return `${requestType}:${targetId}`;
 }
 
 function parseTimeToMinutes(value: string | null) {
@@ -288,8 +356,10 @@ export default function AttendanceManagementClient() {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState("");
   const [message, setMessage] = useState("");
+  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
+  const [isGeneralAffairsApprover, setIsGeneralAffairsApprover] = useState(false);
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
   const [activeMainTab, setActiveMainTab] = useState<MainTab>("employee");
   const [activeRequestSubTab, setActiveRequestSubTab] = useState<RequestSubTab>("leave");
@@ -307,6 +377,8 @@ export default function AttendanceManagementClient() {
   const [leaderTeamIds, setLeaderTeamIds] = useState<Set<string>>(new Set());
   const [attendanceRows, setAttendanceRows] = useState<AttendanceRow[]>([]);
   const [attendanceBreakRows, setAttendanceBreakRows] = useState<AttendanceBreakRow[]>([]);
+  const [approvalRequestRows, setApprovalRequestRows] = useState<ApprovalRequestRow[]>([]);
+  const [approvalRequestStepRows, setApprovalRequestStepRows] = useState<ApprovalRequestStepRow[]>([]);
   const [holidaySet, setHolidaySet] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -317,43 +389,39 @@ export default function AttendanceManagementClient() {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
 
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
+      const authUserId = authData.user?.id;
+      if (!authUserId) throw new Error("ログインユーザーを取得できません。");
+
+      const { data: resolvedProfileId, error: currentProfileIdError } = await supabase.rpc("current_profile_id");
+      if (currentProfileIdError) throw new Error(currentProfileIdError.message);
+
+      const nextCurrentProfileId = (resolvedProfileId as string | null) ?? authUserId;
+      setCurrentProfileId(nextCurrentProfileId);
 
       const [
         { data: currentProfileData, error: currentProfileError },
         { data: teamLeaderData, error: teamLeaderError },
       ] = await Promise.all([
-        supabase.from("profiles_2").select("id,is_admin").eq("id", userId).maybeSingle(),
-        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", userId),
+        supabase
+          .from("profiles_2")
+          .select("id,is_admin,is_general_affairs_approver")
+          .eq("id", nextCurrentProfileId)
+          .maybeSingle(),
+        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", nextCurrentProfileId),
       ]);
 
       if (currentProfileError) throw new Error(currentProfileError.message);
       if (teamLeaderError) throw new Error(teamLeaderError.message);
 
       const nextIsAdmin = currentProfileData?.is_admin === 1;
+      const nextIsGeneralAffairsApprover = currentProfileData?.is_general_affairs_approver === 1;
       const nextLeaderTeamIds = new Set(((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id));
       const nextIsTeamLeader = nextLeaderTeamIds.size > 0;
 
       setIsAdmin(nextIsAdmin);
+      setIsGeneralAffairsApprover(nextIsGeneralAffairsApprover);
       setIsTeamLeader(nextIsTeamLeader);
       setLeaderTeamIds(nextLeaderTeamIds);
-
-      if (!nextIsAdmin && !nextIsTeamLeader) {
-        setLeaveRequestListRows([]);
-        setLeaveSummaryRows([]);
-        setCorrectionRequestListRows([]);
-        setCorrectionSummaryRows([]);
-        setProfiles([]);
-        setProfileJobs([]);
-        setJobs([]);
-        setProfileTeams([]);
-        setTeams([]);
-        setAttendanceRows([]);
-        setAttendanceBreakRows([]);
-        setMessage("勤怠管理は管理者または所属組織リーダーのみ利用できます。");
-        return;
-      }
 
       const monthStart = getMonthStart(displayMonth);
       const monthEnd = getMonthEnd(displayMonth);
@@ -442,10 +510,68 @@ export default function AttendanceManagementClient() {
       if (attendanceError) throw new Error(attendanceError.message);
       if (attendanceBreakError) throw new Error(attendanceBreakError.message);
 
-      setLeaveRequestListRows((leaveRequestListData ?? []) as LeaveRequestRow[]);
-      setLeaveSummaryRows((leaveSummaryData ?? []) as LeaveRequestRow[]);
-      setCorrectionRequestListRows((correctionRequestListData ?? []) as AttendanceCorrectionRequestRow[]);
-      setCorrectionSummaryRows((correctionSummaryData ?? []) as AttendanceCorrectionRequestRow[]);
+      const leaveRequestRows = (leaveRequestListData ?? []) as LeaveRequestRow[];
+      const leaveSummaryRequestRows = (leaveSummaryData ?? []) as LeaveRequestRow[];
+      const correctionRequestRows = (correctionRequestListData ?? []) as AttendanceCorrectionRequestRow[];
+      const correctionSummaryRequestRows = (correctionSummaryData ?? []) as AttendanceCorrectionRequestRow[];
+
+      const leaveTargetIds = Array.from(
+        new Set(
+          [...leaveRequestRows, ...leaveSummaryRequestRows]
+            .map((row) => row.request_group_id)
+            .filter((value): value is string => Boolean(value))
+        )
+      );
+      const correctionTargetIds = Array.from(
+        new Set(
+          [...correctionRequestRows, ...correctionSummaryRequestRows]
+            .map((row) => row.id)
+            .filter((value): value is string => Boolean(value))
+        )
+      );
+
+      const [leaveApprovalResult, correctionApprovalResult] = await Promise.all([
+        leaveTargetIds.length > 0
+          ? supabase
+              .from("approval_request")
+              .select("id,request_type,target_id,applicant_profile_id,status,current_step_no,created_at,completed_at")
+              .eq("request_type", "leave_request")
+              .in("target_id", leaveTargetIds)
+          : Promise.resolve({ data: [], error: null }),
+        correctionTargetIds.length > 0
+          ? supabase
+              .from("approval_request")
+              .select("id,request_type,target_id,applicant_profile_id,status,current_step_no,created_at,completed_at")
+              .eq("request_type", "attendance_correction")
+              .in("target_id", correctionTargetIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (leaveApprovalResult.error) throw new Error(leaveApprovalResult.error.message);
+      if (correctionApprovalResult.error) throw new Error(correctionApprovalResult.error.message);
+
+      const nextApprovalRows = [
+        ...((leaveApprovalResult.data ?? []) as ApprovalRequestRow[]),
+        ...((correctionApprovalResult.data ?? []) as ApprovalRequestRow[]),
+      ];
+      const approvalRequestIds = nextApprovalRows.map((row) => row.id);
+
+      const { data: approvalStepData, error: approvalStepError } =
+        approvalRequestIds.length > 0
+          ? await supabase
+              .from("approval_request_step")
+              .select("id,approval_request_id,step_no,step_name,approver_type,approver_profile_id,approval_status,reviewed_by,reviewed_at")
+              .in("approval_request_id", approvalRequestIds)
+              .order("step_no", { ascending: true })
+              .order("created_at", { ascending: true })
+          : { data: [], error: null };
+
+      if (approvalStepError) throw new Error(approvalStepError.message);
+
+      setLeaveRequestListRows(leaveRequestRows);
+      setLeaveSummaryRows(leaveSummaryRequestRows);
+      setCorrectionRequestListRows(correctionRequestRows);
+      setCorrectionSummaryRows(correctionSummaryRequestRows);
       setProfiles((profileData ?? []) as ProfileRow[]);
       setProfileJobs((profileJobData ?? []) as ProfileJobRow[]);
       setJobs((jobData ?? []) as JobRow[]);
@@ -453,6 +579,8 @@ export default function AttendanceManagementClient() {
       setTeams((teamData ?? []) as TeamRow[]);
       setAttendanceRows((attendanceData ?? []) as AttendanceRow[]);
       setAttendanceBreakRows((attendanceBreakData ?? []) as AttendanceBreakRow[]);
+      setApprovalRequestRows(nextApprovalRows);
+      setApprovalRequestStepRows((approvalStepData ?? []) as ApprovalRequestStepRow[]);
       setHolidaySet(await fetchJapaneseHolidaySet());
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -464,6 +592,12 @@ export default function AttendanceManagementClient() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!loading && activeMainTab === "employee" && !isAdmin && !isTeamLeader) {
+      setActiveMainTab("request");
+    }
+  }, [activeMainTab, isAdmin, isTeamLeader, loading]);
 
   const updateLeaveApprovalStatus = async (requestGroupId: string, approvalStatus: 1 | 2 | 3) => {
     setSavingKey(`leave-${requestGroupId}`);
@@ -543,20 +677,156 @@ export default function AttendanceManagementClient() {
     return profiles.filter((profile) => leaderManagedProfileIds.has(profile.id));
   }, [isAdmin, leaderManagedProfileIds, profiles]);
 
-  const visibleProfileIds = useMemo(() => new Set(visibleProfiles.map((profile) => profile.id)), [visibleProfiles]);
+  const profileNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const profile of profiles) {
+      map.set(profile.id, fullName(profile));
+    }
+    return map;
+  }, [profiles]);
+
+  const approvalRequestByTargetKey = useMemo(() => {
+    const map = new Map<string, ApprovalRequestRow>();
+    for (const row of approvalRequestRows) {
+      map.set(getApprovalTargetKey(row.request_type, row.target_id), row);
+    }
+    return map;
+  }, [approvalRequestRows]);
+
+  const approvalStepsByRequestId = useMemo(() => {
+    const map = new Map<string, ApprovalRequestStepRow[]>();
+    for (const row of approvalRequestStepRows) {
+      if (!map.has(row.approval_request_id)) {
+        map.set(row.approval_request_id, []);
+      }
+      map.get(row.approval_request_id)!.push(row);
+    }
+    return map;
+  }, [approvalRequestStepRows]);
+
+  const isApprovalFlowRelatedToCurrentUser = useCallback(
+    (approvalFlow: ApprovalRequestRow | null) => {
+      if (!approvalFlow || !currentProfileId) return false;
+      if (approvalFlow.applicant_profile_id === currentProfileId) return true;
+      if ([2, 3, 4, 5].includes(approvalFlow.status) && isGeneralAffairsApprover) return true;
+
+      const steps = approvalStepsByRequestId.get(approvalFlow.id) ?? [];
+      return steps.some((step) => step.approver_profile_id === currentProfileId);
+    },
+    [approvalStepsByRequestId, currentProfileId, isGeneralAffairsApprover]
+  );
+
+  const canSeeRequest = useCallback(
+    (profileId: string, approvalFlow: ApprovalRequestRow | null) => {
+      if (isAdmin || leaderManagedProfileIds.has(profileId)) return true;
+      return isApprovalFlowRelatedToCurrentUser(approvalFlow);
+    },
+    [isAdmin, isApprovalFlowRelatedToCurrentUser, leaderManagedProfileIds]
+  );
+
+  const canReviewRequest = useCallback(
+    (profileId: string, legacyStatus: number, approvalFlow: ApprovalRequestRow | null) => {
+      if (!currentProfileId) return false;
+
+      if (!approvalFlow) {
+        return legacyStatus === 0 && (isAdmin || leaderManagedProfileIds.has(profileId));
+      }
+
+      if (![1, 2].includes(approvalFlow.status)) return false;
+
+      if (approvalFlow.current_step_no === 1) {
+        const step1Rows = (approvalStepsByRequestId.get(approvalFlow.id) ?? []).filter((step) => step.step_no === 1);
+        const hasSpecificStep1Approver = step1Rows.some((step) => step.approver_profile_id);
+
+        if (hasSpecificStep1Approver) {
+          return (
+            isAdmin ||
+            step1Rows.some(
+              (step) => step.approver_profile_id === currentProfileId && step.approval_status === 1
+            )
+          );
+        }
+
+        return isAdmin || leaderManagedProfileIds.has(profileId);
+      }
+
+      if (approvalFlow.current_step_no === 2) {
+        return isAdmin || isGeneralAffairsApprover;
+      }
+
+      return false;
+    },
+    [approvalStepsByRequestId, currentProfileId, isAdmin, isGeneralAffairsApprover, leaderManagedProfileIds]
+  );
+
+  const getActionNotice = useCallback(
+    (legacyStatus: number, approvalFlow: ApprovalRequestRow | null) => {
+      if (!approvalFlow) {
+        return legacyStatus === 0 ? "現在の承認者ではありません。" : "この申請は完了しています。";
+      }
+
+      if ([3, 4, 5].includes(approvalFlow.status)) {
+        return "この申請は完了しています。";
+      }
+
+      if (approvalFlow.current_step_no === 1) {
+        return "STEP 1 の承認者の対応待ちです。";
+      }
+
+      if (approvalFlow.current_step_no === 2) {
+        return "STEP 2 の総務承認者の対応待ちです。";
+      }
+
+      return "現在の承認者ではありません。";
+    },
+    []
+  );
+
+  const renderApprovalFlowSummary = useCallback(
+    (approvalFlow: ApprovalRequestRow | null) => {
+      if (!approvalFlow) return null;
+
+      const steps = approvalStepsByRequestId.get(approvalFlow.id) ?? [];
+      const step1Rows = steps.filter((step) => step.step_no === 1);
+      const step2Rows = steps.filter((step) => step.step_no === 2);
+
+      const renderStepMember = (step: ApprovalRequestStepRow) => {
+        const profileId = step.approver_profile_id ?? step.reviewed_by;
+        const name = profileId ? profileNameById.get(profileId) ?? "-" : "総務部";
+        return `${name}（${APPROVAL_STEP_STATUS_LABELS[step.approval_status] ?? step.approval_status}）`;
+      };
+
+      return (
+        <div className={styles.approvalFlowBlock}>
+          <div className={styles.approvalFlowTitle}>承認フロー</div>
+          <div className={styles.approvalFlowRow}>
+            <span className={styles.approvalFlowStepLabel}>STEP 1</span>
+            <span>{step1Rows.length > 0 ? step1Rows.map(renderStepMember).join("、") : "-"}</span>
+          </div>
+          <div className={styles.approvalFlowRow}>
+            <span className={styles.approvalFlowStepLabel}>STEP 2</span>
+            <span>{step2Rows.length > 0 ? step2Rows.map(renderStepMember).join("、") : "総務部"}</span>
+          </div>
+        </div>
+      );
+    },
+    [approvalStepsByRequestId, profileNameById]
+  );
 
   const groupedLeaveRequests = useMemo<GroupedLeaveRequest[]>(() => {
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
     const map = new Map<string, GroupedLeaveRequest>();
 
     for (const row of leaveRequestListRows) {
-      if (!visibleProfileIds.has(row.profile_id)) continue;
+      const approvalFlow = approvalRequestByTargetKey.get(getApprovalTargetKey("leave_request", row.request_group_id)) ?? null;
+      if (!canSeeRequest(row.profile_id, approvalFlow)) continue;
       const current = map.get(row.request_group_id);
 
       if (!current) {
         map.set(row.request_group_id, {
           requestGroupId: row.request_group_id,
           profileId: row.profile_id,
+          approvalFlow,
           applicantName: fullName(profileMap.get(row.profile_id)),
           createdAt: row.created_at,
           comment: row.comment ?? "",
@@ -596,16 +866,22 @@ export default function AttendanceManagementClient() {
 
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt, "ja"));
     return result;
-  }, [leaveRequestListRows, profiles, visibleProfileIds]);
+  }, [approvalRequestByTargetKey, canSeeRequest, leaveRequestListRows, profiles]);
 
   const correctionRequestCards = useMemo<CorrectionRequestCard[]>(() => {
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
 
     return correctionRequestListRows
-      .filter((row) => visibleProfileIds.has(row.profile_id))
       .map((row) => ({
+        row,
+        approvalFlow:
+          approvalRequestByTargetKey.get(getApprovalTargetKey("attendance_correction", row.id)) ?? null,
+      }))
+      .filter(({ row, approvalFlow }) => canSeeRequest(row.profile_id, approvalFlow))
+      .map(({ row, approvalFlow }) => ({
         id: row.id,
         profileId: row.profile_id,
+        approvalFlow,
         applicantName: fullName(profileMap.get(row.profile_id)),
         requestedAt: row.requested_at,
         workDate: row.work_date,
@@ -621,7 +897,7 @@ export default function AttendanceManagementClient() {
         approvalStatus: row.approval_status,
       }))
       .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt, "ja"));
-  }, [correctionRequestListRows, profiles, visibleProfileIds]);
+  }, [approvalRequestByTargetKey, canSeeRequest, correctionRequestListRows, profiles]);
 
   const employeeSummaries = useMemo<EmployeeSummaryRow[]>(() => {
     const monthStart = getMonthStart(displayMonth);
@@ -733,6 +1009,10 @@ export default function AttendanceManagementClient() {
     visibleProfiles,
   ]);
 
+  const canUseEmployeeSection = isAdmin || isTeamLeader;
+  const hasRequestAccess =
+    canUseEmployeeSection || isGeneralAffairsApprover || groupedLeaveRequests.length > 0 || correctionRequestCards.length > 0;
+
   return (
     <main className={styles.page}>
       <div className={styles.pageHeader}>
@@ -758,16 +1038,18 @@ export default function AttendanceManagementClient() {
       </div>
 
       <div className={styles.tabBar}>
+        {canUseEmployeeSection && (
+          <button
+            type="button"
+            className={`${styles.tabButton} ${activeMainTab === "employee" ? styles.tabButtonActive : ""}`}
+            onClick={() => setActiveMainTab("employee")}
+          >
+            社員一覧
+          </button>
+        )}
         <button
           type="button"
-          className={`${styles.tabButton} ${activeMainTab === "employee" ? styles.tabButtonActive : ""}`}
-          onClick={() => setActiveMainTab("employee")}
-        >
-          社員一覧
-        </button>
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeMainTab === "request" ? styles.tabButtonActive : ""}`}
+          className={`${styles.tabButton} ${activeMainTab === "request" || !canUseEmployeeSection ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveMainTab("request")}
         >
           申請一覧
@@ -776,11 +1058,11 @@ export default function AttendanceManagementClient() {
 
       {message && <p className={styles.message}>{message}</p>}
 
-      {!loading && !isAdmin && !isTeamLeader ? (
+      {!loading && !hasRequestAccess ? (
         <section className={styles.employeeSection}>
-          <div className={styles.emptyState}>管理者または所属組織リーダーのみ利用できます。</div>
+          <div className={styles.emptyState}>承認対象の申請がありません。</div>
         </section>
-      ) : activeMainTab === "employee" ? (
+      ) : activeMainTab === "employee" && canUseEmployeeSection ? (
         <section className={styles.employeeSection}>
           {loading ? (
             <div className={styles.emptyState}>読み込み中...</div>
@@ -866,8 +1148,8 @@ export default function AttendanceManagementClient() {
                         <div className={styles.requestMeta}>申請日：{formatDateJP(group.createdAt.slice(0, 10))}</div>
                       </div>
 
-                      <div className={`${styles.statusBadge} ${getStatusClass(group.approvalStatus)}`}>
-                        {APPROVAL_STATUS_LABELS[group.approvalStatus] ?? String(group.approvalStatus)}
+                      <div className={`${styles.statusBadge} ${getDisplayStatusClass(group.approvalStatus, group.approvalFlow)}`}>
+                        {getDisplayApprovalLabel(group.approvalStatus, group.approvalFlow)}
                       </div>
                     </div>
 
@@ -882,32 +1164,40 @@ export default function AttendanceManagementClient() {
 
                     <div className={styles.commentBlock}>コメント：{group.comment || "-"}</div>
 
-                    <div className={styles.actionRow}>
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        disabled={savingKey === `leave-${group.requestGroupId}`}
-                        onClick={() => updateLeaveApprovalStatus(group.requestGroupId, 1)}
-                      >
-                        承認
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        disabled={savingKey === `leave-${group.requestGroupId}`}
-                        onClick={() => updateLeaveApprovalStatus(group.requestGroupId, 2)}
-                      >
-                        却下
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        disabled={savingKey === `leave-${group.requestGroupId}`}
-                        onClick={() => updateLeaveApprovalStatus(group.requestGroupId, 3)}
-                      >
-                        取消
-                      </button>
-                    </div>
+                    {renderApprovalFlowSummary(group.approvalFlow)}
+
+                    {canReviewRequest(group.profileId, group.approvalStatus, group.approvalFlow) ? (
+                      <div className={styles.actionRow}>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          disabled={savingKey === `leave-${group.requestGroupId}`}
+                          onClick={() => updateLeaveApprovalStatus(group.requestGroupId, 1)}
+                        >
+                          承認
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          disabled={savingKey === `leave-${group.requestGroupId}`}
+                          onClick={() => updateLeaveApprovalStatus(group.requestGroupId, 2)}
+                        >
+                          却下
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.actionButton}
+                          disabled={savingKey === `leave-${group.requestGroupId}`}
+                          onClick={() => updateLeaveApprovalStatus(group.requestGroupId, 3)}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={styles.actionNotice}>
+                        {getActionNotice(group.approvalStatus, group.approvalFlow)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -925,8 +1215,8 @@ export default function AttendanceManagementClient() {
                       <div className={styles.requestMeta}>申請日：{formatDateJP(request.requestedAt.slice(0, 10))}</div>
                     </div>
 
-                    <div className={`${styles.statusBadge} ${getStatusClass(request.approvalStatus)}`}>
-                      {APPROVAL_STATUS_LABELS[request.approvalStatus] ?? String(request.approvalStatus)}
+                    <div className={`${styles.statusBadge} ${getDisplayStatusClass(request.approvalStatus, request.approvalFlow)}`}>
+                      {getDisplayApprovalLabel(request.approvalStatus, request.approvalFlow)}
                     </div>
                   </div>
 
@@ -958,47 +1248,55 @@ export default function AttendanceManagementClient() {
 
                   <div className={styles.commentBlock}>コメント：{request.comment || "-"}</div>
 
-                  <div className={styles.actionRow}>
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      disabled={savingKey === `correction-${request.id}`}
-                      onClick={() =>
-                        updateCorrectionApprovalStatus(
-                          correctionRequestListRows.find((row) => row.id === request.id)!,
-                          1
-                        )
-                      }
-                    >
-                      承認
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      disabled={savingKey === `correction-${request.id}`}
-                      onClick={() =>
-                        updateCorrectionApprovalStatus(
-                          correctionRequestListRows.find((row) => row.id === request.id)!,
-                          2
-                        )
-                      }
-                    >
-                      却下
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      disabled={savingKey === `correction-${request.id}`}
-                      onClick={() =>
-                        updateCorrectionApprovalStatus(
-                          correctionRequestListRows.find((row) => row.id === request.id)!,
-                          3
-                        )
-                      }
-                    >
-                      取消
-                    </button>
-                  </div>
+                  {renderApprovalFlowSummary(request.approvalFlow)}
+
+                  {canReviewRequest(request.profileId, request.approvalStatus, request.approvalFlow) ? (
+                    <div className={styles.actionRow}>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        disabled={savingKey === `correction-${request.id}`}
+                        onClick={() =>
+                          updateCorrectionApprovalStatus(
+                            correctionRequestListRows.find((row) => row.id === request.id)!,
+                            1
+                          )
+                        }
+                      >
+                        承認
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        disabled={savingKey === `correction-${request.id}`}
+                        onClick={() =>
+                          updateCorrectionApprovalStatus(
+                            correctionRequestListRows.find((row) => row.id === request.id)!,
+                            2
+                          )
+                        }
+                      >
+                        却下
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        disabled={savingKey === `correction-${request.id}`}
+                        onClick={() =>
+                          updateCorrectionApprovalStatus(
+                            correctionRequestListRows.find((row) => row.id === request.id)!,
+                            3
+                          )
+                        }
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={styles.actionNotice}>
+                      {getActionNotice(request.approvalStatus, request.approvalFlow)}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

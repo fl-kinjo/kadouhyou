@@ -20,6 +20,20 @@ type PaidLeaveBalanceRow = {
   remaining_days: number | string;
 };
 
+type ProfileOption = {
+  id: string;
+  last_name: string | null;
+  first_name: string | null;
+  email: string | null;
+  status?: number | null;
+  is_general_affairs_approver?: number | null;
+};
+
+type CurrentProfile = {
+  id: string;
+  email: string | null;
+};
+
 type TabType = "form" | "list";
 
 type SelectedLeaveTypeMap = Record<string, number>;
@@ -111,11 +125,13 @@ function sortDateKeys(dateKeys: string[]) {
   return [...dateKeys].sort((a, b) => a.localeCompare(b, "ja"));
 }
 
-function createRequestGroupId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function getProfileDisplayName(profile: Pick<ProfileOption, "last_name" | "first_name" | "email">) {
+  const name = [profile.last_name, profile.first_name].filter(Boolean).join(" ").trim();
+  return name || profile.email || "氏名未設定";
+}
+
+function uniq(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 function getApprovalStatusClass(status: number) {
@@ -151,18 +167,86 @@ export default function LeaveRequestClient() {
   const [selectedLeaveTypes, setSelectedLeaveTypes] = useState<SelectedLeaveTypeMap>({});
   const [comment, setComment] = useState("");
 
+  const [approvalFlowOpen, setApprovalFlowOpen] = useState(false);
+  const [approvalFlowLoading, setApprovalFlowLoading] = useState(false);
+  const [approvalMemberOptions, setApprovalMemberOptions] = useState<ProfileOption[]>([]);
+  const [selectedStep1ApproverIds, setSelectedStep1ApproverIds] = useState<string[]>([]);
+  const [selectedShareMemberIds, setSelectedShareMemberIds] = useState<string[]>([]);
+  const [shareMemberSearch, setShareMemberSearch] = useState("");
+  const [generalAffairsApproverCount, setGeneralAffairsApproverCount] = useState(0);
+
   const calendarDays = useMemo(() => buildCalendarDays(displayMonth), [displayMonth]);
+
+  const selectedStep1Approvers = useMemo(
+    () => approvalMemberOptions.filter((profile) => selectedStep1ApproverIds.includes(profile.id)),
+    [approvalMemberOptions, selectedStep1ApproverIds]
+  );
+
+  const selectedShareMembers = useMemo(
+    () => approvalMemberOptions.filter((profile) => selectedShareMemberIds.includes(profile.id)),
+    [approvalMemberOptions, selectedShareMemberIds]
+  );
+
+  const filteredShareMemberOptions = useMemo(() => {
+    const keyword = shareMemberSearch.trim().toLowerCase();
+    const selectedSet = new Set([...selectedShareMemberIds, ...selectedStep1ApproverIds]);
+
+    return approvalMemberOptions
+      .filter((profile) => !selectedSet.has(profile.id))
+      .filter((profile) => {
+        if (!keyword) return true;
+        return `${getProfileDisplayName(profile)} ${profile.email ?? ""}`.toLowerCase().includes(keyword);
+      })
+      .slice(0, 8);
+  }, [approvalMemberOptions, selectedShareMemberIds, selectedStep1ApproverIds, shareMemberSearch]);
+
+  const resolveCurrentProfile = useCallback(async (): Promise<CurrentProfile> => {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw new Error(authError.message);
+
+    const authUser = authData.user;
+    if (!authUser?.id) throw new Error("ログインユーザーを取得できません。");
+
+    const { data: profileById, error: profileByIdError } = await supabase
+      .from("profiles_2")
+      .select("id,email")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (profileByIdError) throw new Error(profileByIdError.message);
+
+    if (profileById?.id) {
+      return { id: profileById.id as string, email: (profileById.email as string | null) ?? null };
+    }
+
+    const authEmail = authUser.email?.trim();
+    if (!authEmail) {
+      return { id: authUser.id, email: null };
+    }
+
+    const { data: profileByEmail, error: profileByEmailError } = await supabase
+      .from("profiles_2")
+      .select("id,email")
+      .ilike("email", authEmail)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (profileByEmailError) throw new Error(profileByEmailError.message);
+
+    return {
+      id: (profileByEmail?.id as string | undefined) ?? authUser.id,
+      email: (profileByEmail?.email as string | null | undefined) ?? authEmail,
+    };
+  }, [supabase]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
-
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
+      const currentProfile = await resolveCurrentProfile();
+      const userId = currentProfile.id;
 
       const [{ data: balanceData, error: balanceError }, { data: requestData, error: requestError }] =
         await Promise.all([
@@ -202,7 +286,7 @@ export default function LeaveRequestClient() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [resolveCurrentProfile, supabase]);
 
   useEffect(() => {
     load();
@@ -245,42 +329,142 @@ export default function LeaveRequestClient() {
     setComment("");
   };
 
-  const submit = async () => {
+  const loadApprovalFlowOptions = async () => {
+    setApprovalFlowLoading(true);
+
+    try {
+      const currentProfile = await resolveCurrentProfile();
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles_2")
+        .select("id,last_name,first_name,email,status,is_general_affairs_approver")
+        .eq("status", 0)
+        .order("last_name", { ascending: true })
+        .order("first_name", { ascending: true });
+
+      if (profilesError) throw new Error(profilesError.message);
+
+      const profiles = ((profilesData ?? []) as ProfileOption[]).filter((profile) => profile.id !== currentProfile.id);
+      setApprovalMemberOptions(profiles);
+      setGeneralAffairsApproverCount(
+        ((profilesData ?? []) as ProfileOption[]).filter((profile) => Number(profile.is_general_affairs_approver ?? 0) === 1)
+          .length
+      );
+
+      const { data: profileTeamData, error: profileTeamError } = await supabase
+        .from("profile_team")
+        .select("team_id")
+        .eq("profile_id", currentProfile.id);
+
+      if (profileTeamError) throw new Error(profileTeamError.message);
+
+      const teamIds = uniq(((profileTeamData ?? []) as { team_id: string | null }[]).map((row) => row.team_id ?? ""));
+
+      if (teamIds.length === 0) {
+        setSelectedStep1ApproverIds([]);
+        return;
+      }
+
+      const { data: teamLeaderData, error: teamLeaderError } = await supabase
+        .from("team_leader")
+        .select("profile_id")
+        .in("team_id", teamIds);
+
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
+
+      const leaderIds = uniq(
+        ((teamLeaderData ?? []) as { profile_id: string | null }[])
+          .map((row) => row.profile_id ?? "")
+          .filter((id) => id !== currentProfile.id)
+      );
+
+      if (leaderIds.length === 0) {
+        setSelectedStep1ApproverIds([]);
+        return;
+      }
+
+      const { data: leaderData, error: leaderError } = await supabase
+        .from("profiles_2")
+        .select("id,last_name,first_name,email,status")
+        .in("id", leaderIds);
+
+      if (leaderError) throw new Error(leaderError.message);
+
+      const activeLeaderIds = ((leaderData ?? []) as ProfileOption[])
+        .filter((profile) => Number(profile.status ?? 0) === 0)
+        .map((profile) => profile.id);
+      setSelectedStep1ApproverIds(activeLeaderIds);
+    } finally {
+      setApprovalFlowLoading(false);
+    }
+  };
+
+  const validateLeaveRequestForm = () => {
+    if (selectedDates.length === 0) {
+      throw new Error("申請日を選択してください。");
+    }
+
+    const workDates = sortDateKeys(selectedDates);
+    const leaveTypes = workDates.map((dateKey) => selectedLeaveTypes[dateKey] ?? 0);
+
+    return { workDates, leaveTypes };
+  };
+
+  const openApprovalFlowModal = async () => {
     setMessage("");
 
-    if (selectedDates.length === 0) {
-      setMessage("申請日を選択してください。");
-      return;
+    try {
+      validateLeaveRequestForm();
+      setSelectedStep1ApproverIds([]);
+      setSelectedShareMemberIds([]);
+      setShareMemberSearch("");
+      await loadApprovalFlowOptions();
+      setApprovalFlowOpen(true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
     }
+  };
+
+  const closeApprovalFlowModal = () => {
+    if (saving) return;
+    setApprovalFlowOpen(false);
+    setSelectedStep1ApproverIds([]);
+    setSelectedShareMemberIds([]);
+    setShareMemberSearch("");
+  };
+
+  const submit = async () => {
+    setMessage("");
 
     setSaving(true);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) throw new Error(authError.message);
+      const { workDates, leaveTypes } = validateLeaveRequestForm();
+      const step1ApproverIds = uniq([...selectedStep1ApproverIds, ...selectedShareMemberIds]);
 
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
+      if (step1ApproverIds.length === 0) {
+        throw new Error("STEP 1 または共有先に承認者を1名以上選択してください。");
+      }
 
-      const requestGroupId = createRequestGroupId();
+      if (generalAffairsApproverCount === 0) {
+        throw new Error("総務承認者権限を持つ社員が設定されていません。社員管理画面で総務承認者を設定してください。");
+      }
 
-      const payload = selectedDates.map((dateKey) => ({
-        profile_id: userId,
-        work_date: dateKey,
-        leave_type: selectedLeaveTypes[dateKey] ?? 0,
-        approval_status: 0,
-        request_group_id: requestGroupId,
-        comment: comment.trim() || null,
-        updated_by: userId,
-      }));
-
-      const { error } = await supabase.from("leave_request").insert(payload);
+      const { error } = await supabase.rpc("create_leave_request_with_flow", {
+        target_work_dates: workDates,
+        target_leave_types: leaveTypes,
+        target_comment: comment.trim() || null,
+        target_step1_approver_profile_ids: step1ApproverIds,
+        target_shared_profile_ids: [],
+      });
 
       if (error) throw new Error(error.message);
 
+      closeApprovalFlowModal();
       clearSelection();
       setActiveTab("list");
       await load();
+      setMessage("休暇申請が完了しました。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -474,8 +658,13 @@ export default function LeaveRequestClient() {
                 <button type="button" className={styles.clearButton} onClick={clearSelection} disabled={saving}>
                   クリア
                 </button>
-                <button type="button" className={styles.submitButton} onClick={submit} disabled={saving || loading}>
-                  {saving ? "申請中..." : "申請する"}
+                <button
+                  type="button"
+                  className={styles.submitButton}
+                  onClick={openApprovalFlowModal}
+                  disabled={saving || loading || approvalFlowLoading}
+                >
+                  {saving || approvalFlowLoading ? "処理中..." : "次へ"}
                 </button>
               </div>
             </div>
@@ -523,6 +712,138 @@ export default function LeaveRequestClient() {
           )}
         </section>
       )}
+
+
+      {approvalFlowOpen && (
+        <div className={styles.modalOverlay} onClick={closeApprovalFlowModal}>
+          <div
+            className={`${styles.modalCard} ${styles.approvalFlowModalCard}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className={styles.modalTitle}>承認フローの確認</h2>
+
+            <div className={styles.approvalFlowBody}>
+              <section className={styles.approvalFlowSection}>
+                <h3 className={styles.approvalFlowHeading}>承認フロー（必須）</h3>
+                <p className={styles.approvalFlowDescription}>この申請は以下の順で承認されます</p>
+
+                <div className={styles.approvalFlowSteps}>
+                  <div className={`${styles.approvalFlowStepCard} ${styles.step1ApproverCard}`}>
+                    <span className={styles.approvalFlowStepLabel}>STEP 1</span>
+                    <div className={styles.step1ApproverArea}>
+                      {selectedStep1Approvers.length === 0 && (
+                        <span className={styles.step1EmptyText}>未選択</span>
+                      )}
+
+                      {selectedStep1Approvers.map((profile) => (
+                        <span key={profile.id} className={styles.shareMemberChip}>
+                          {getProfileDisplayName(profile)}
+                          <button
+                            type="button"
+                            className={styles.shareMemberRemoveButton}
+                            onClick={() =>
+                              setSelectedStep1ApproverIds((current) => current.filter((id) => id !== profile.id))
+                            }
+                            aria-label={`${getProfileDisplayName(profile)}をSTEP 1承認者から削除`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.approvalFlowArrow}>→</div>
+                  <div className={styles.approvalFlowStepCard}>
+                    <span className={styles.approvalFlowStepLabel}>STEP 2</span>
+                    <span className={styles.approvalFlowStepName}>総務部</span>
+                  </div>
+                </div>
+
+                <p className={styles.approvalFlowNote}>※ 上長の承認後に総務承認者へ通知されます</p>
+                {selectedStep1ApproverIds.length === 0 && selectedShareMemberIds.length === 0 && (
+                  <p className={styles.approvalFlowWarning}>STEP 1 または共有先に承認者を1名以上選択してください。</p>
+                )}
+                {generalAffairsApproverCount === 0 && (
+                  <p className={styles.approvalFlowWarning}>
+                    総務承認者権限を持つ社員が設定されていません。社員管理画面で総務承認者を設定してください。
+                  </p>
+                )}
+              </section>
+
+              <section className={styles.approvalFlowSection}>
+                <h3 className={styles.approvalFlowHeading}>共有先（任意）</h3>
+                <p className={styles.approvalFlowDescription}>
+                  STEP 1の上長以外に承認が必要なメンバーを追加できます
+                </p>
+
+                <div className={styles.shareMemberArea}>
+                  {selectedShareMembers.map((profile) => (
+                    <span key={profile.id} className={styles.shareMemberChip}>
+                      {getProfileDisplayName(profile)}
+                      <button
+                        type="button"
+                        className={styles.shareMemberRemoveButton}
+                        onClick={() =>
+                          setSelectedShareMemberIds((current) => current.filter((id) => id !== profile.id))
+                        }
+                        aria-label={`${getProfileDisplayName(profile)}を共有先から削除`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+
+                  <div className={styles.shareMemberPicker}>
+                    <input
+                      type="text"
+                      value={shareMemberSearch}
+                      onChange={(event) => setShareMemberSearch(event.target.value)}
+                      className={styles.shareMemberSearchInput}
+                      placeholder="名前で検索"
+                    />
+                    {shareMemberSearch.trim() !== "" && filteredShareMemberOptions.length > 0 && (
+                      <div className={styles.shareMemberDropdown}>
+                        {filteredShareMemberOptions.map((profile) => (
+                          <button
+                            key={profile.id}
+                            type="button"
+                            className={styles.shareMemberOption}
+                            onClick={() => {
+                              setSelectedShareMemberIds((current) => uniq([...current, profile.id]));
+                              setShareMemberSearch("");
+                            }}
+                          >
+                            {getProfileDisplayName(profile)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div className={styles.modalActionRow}>
+              <button type="button" className={styles.modalCancelButton} onClick={closeApprovalFlowModal} disabled={saving}>
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.modalSaveButton}
+                onClick={submit}
+                disabled={
+                  saving ||
+                  (selectedStep1ApproverIds.length === 0 && selectedShareMemberIds.length === 0) ||
+                  generalAffairsApproverCount === 0
+                }
+              >
+                {saving ? "申請中..." : "申請する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

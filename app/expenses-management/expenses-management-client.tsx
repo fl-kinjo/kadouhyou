@@ -32,6 +32,34 @@ type ProfileRow = {
   email: string | null;
 };
 
+type CurrentProfileRow = ProfileRow & {
+  is_admin: number | boolean | null;
+  is_general_affairs_approver: number | boolean | null;
+};
+
+type ApprovalRequestRow = {
+  id: string;
+  request_type: string;
+  target_id: string;
+  applicant_profile_id: string;
+  status: number;
+  current_step_no: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
+type ApprovalRequestStepRow = {
+  id: string;
+  approval_request_id: string;
+  step_no: number;
+  step_name: string;
+  approver_type: string;
+  approver_profile_id: string | null;
+  approval_status: number;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+};
+
 type ProfileJobRow = {
   profile_id: string;
   job_id: string;
@@ -70,6 +98,7 @@ type ExpenseTypeFilter = "all" | "direct" | "indirect";
 type GroupedExpenseRequest = {
   requestGroupId: string;
   profileId: string;
+  approvalFlow: ApprovalRequestRow | null;
   applicantName: string;
   createdAt: string;
   applicationStatus: number;
@@ -104,6 +133,21 @@ const APPLICATION_STATUS_LABELS: Record<number, string> = {
   1: "承認済み",
   2: "却下",
   3: "取消",
+};
+
+const APPROVAL_FLOW_STATUS_LABELS: Record<number, string> = {
+  1: "STEP 1 承認待ち",
+  2: "STEP 2 総務承認待ち",
+  3: "承認済み",
+  4: "却下",
+  5: "取消",
+};
+
+const APPROVAL_STEP_STATUS_LABELS: Record<number, string> = {
+  1: "未承認",
+  2: "承認済み",
+  3: "却下",
+  4: "取消",
 };
 
 function formatMonthTitle(date: Date) {
@@ -145,6 +189,18 @@ function getStatusClass(status: number) {
   }
 }
 
+function getApprovalFlowStatusClass(status: number) {
+  switch (status) {
+    case 3:
+      return styles.statusApproved;
+    case 4:
+    case 5:
+      return styles.statusRejected;
+    default:
+      return styles.statusPending;
+  }
+}
+
 function matchesExpenseTypeFilter(expenseType: number | null, filter: ExpenseTypeFilter) {
   if (filter === "all") return true;
   if (filter === "direct") return expenseType === 0;
@@ -163,15 +219,24 @@ function formatTeamLabel(team: TeamRow | null | undefined) {
   return team.name;
 }
 
-export default function ExpensesManagementClient() {
+type ExpensesManagementClientProps = {
+  initialHasApprovalAccess: boolean;
+};
+
+export default function ExpensesManagementClient({
+  initialHasApprovalAccess,
+}: ExpensesManagementClientProps) {
   const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
   const [savingGroupId, setSavingGroupId] = useState("");
   const [downloadingReceiptPath, setDownloadingReceiptPath] = useState("");
   const [message, setMessage] = useState("");
+  const [currentProfileId, setCurrentProfileId] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
+  const [isGeneralAffairsApprover, setIsGeneralAffairsApprover] = useState(false);
+  const [hasApprovalAccess, setHasApprovalAccess] = useState(initialHasApprovalAccess);
   const [displayMonth, setDisplayMonth] = useState(() => getMonthStart(new Date()));
   const [activeMainTab, setActiveMainTab] = useState<MainTab>("employee");
   const [expenseTypeFilter, setExpenseTypeFilter] = useState<ExpenseTypeFilter>("all");
@@ -185,6 +250,8 @@ export default function ExpensesManagementClient() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [profileTeams, setProfileTeams] = useState<ProfileTeamRow[]>([]);
   const [leaderTeamIds, setLeaderTeamIds] = useState<Set<string>>(new Set());
+  const [approvalRequestRows, setApprovalRequestRows] = useState<ApprovalRequestRow[]>([]);
+  const [approvalRequestStepRows, setApprovalRequestStepRows] = useState<ApprovalRequestStepRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -193,48 +260,29 @@ export default function ExpensesManagementClient() {
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
-
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
+      if (!authData.user?.id) throw new Error("ログインユーザーを取得できません。");
 
       const [
-        { data: currentProfileData, error: currentProfileError },
-        { data: teamLeaderData, error: teamLeaderError },
+        { data: currentProfileIdData, error: currentProfileIdError },
+        { data: canAccessData, error: canAccessError },
       ] = await Promise.all([
-        supabase.from("profiles_2").select("id,is_admin").eq("id", userId).maybeSingle(),
-        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", userId),
+        supabase.rpc("current_profile_id"),
+        supabase.rpc("can_access_expense_management"),
       ]);
+      if (currentProfileIdError) throw new Error(currentProfileIdError.message);
+      if (canAccessError) throw new Error(canAccessError.message);
 
-      if (currentProfileError) throw new Error(currentProfileError.message);
-      if (teamLeaderError) throw new Error(teamLeaderError.message);
-
-      const nextIsAdmin = currentProfileData?.is_admin === 1;
-      const nextLeaderTeamIds = new Set(((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id));
-      const nextIsTeamLeader = nextLeaderTeamIds.size > 0;
-
-      setIsAdmin(nextIsAdmin);
-      setIsTeamLeader(nextIsTeamLeader);
-      setLeaderTeamIds(nextLeaderTeamIds);
-
-      if (!nextIsAdmin && !nextIsTeamLeader) {
-        setExpenseRows([]);
-        setProfiles([]);
-        setProfileJobs([]);
-        setJobs([]);
-        setProjects([]);
-        setTeams([]);
-        setProfileTeams([]);
-        setMessage("経費申請承認は管理者または所属組織リーダーのみ利用できます。");
-        return;
-      }
+      const profileId = currentProfileIdData as string | null;
+      if (!profileId) throw new Error("ログイン中の社員情報を取得できません。");
 
       const monthStart = getMonthStart(displayMonth);
       const monthEnd = getMonthEnd(displayMonth);
-
       const from = monthStart.toISOString();
       const to = monthEnd.toISOString();
 
       const [
+        { data: currentProfileData, error: currentProfileError },
+        { data: teamLeaderData, error: teamLeaderError },
         { data: expenseData, error: expenseError },
         { data: profileData, error: profileError },
         { data: profileJobData, error: profileJobError },
@@ -242,7 +290,14 @@ export default function ExpensesManagementClient() {
         { data: projectData, error: projectError },
         { data: teamData, error: teamError },
         { data: profileTeamData, error: profileTeamError },
+        { data: approvalRequestData, error: approvalRequestError },
       ] = await Promise.all([
+        supabase
+          .from("profiles_2")
+          .select("id,last_name,first_name,email,is_admin,is_general_affairs_approver")
+          .eq("id", profileId)
+          .maybeSingle(),
+        supabase.from("team_leader").select("team_id,profile_id").eq("profile_id", profileId),
         supabase
           .from("project_actual_cost")
           .select(
@@ -262,8 +317,17 @@ export default function ExpensesManagementClient() {
         supabase.from("project").select("id,name").order("created_at", { ascending: true }),
         supabase.from("team").select("id,name,department_code,parent_id").order("name", { ascending: true }),
         supabase.from("profile_team").select("profile_id,team_id"),
+        supabase
+          .from("approval_request")
+          .select("id,request_type,target_id,applicant_profile_id,status,current_step_no,created_at,completed_at")
+          .eq("request_type", "expense_request")
+          .gte("created_at", from)
+          .lt("created_at", to)
+          .order("created_at", { ascending: false }),
       ]);
 
+      if (currentProfileError) throw new Error(currentProfileError.message);
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
       if (expenseError) throw new Error(expenseError.message);
       if (profileError) throw new Error(profileError.message);
       if (profileJobError) throw new Error(profileJobError.message);
@@ -271,7 +335,46 @@ export default function ExpensesManagementClient() {
       if (projectError) throw new Error(projectError.message);
       if (teamError) throw new Error(teamError.message);
       if (profileTeamError) throw new Error(profileTeamError.message);
+      if (approvalRequestError) throw new Error(approvalRequestError.message);
 
+      const currentProfile = currentProfileData as CurrentProfileRow | null;
+      const nextIsAdmin = currentProfile?.is_admin === 1 || currentProfile?.is_admin === true;
+      const nextIsGeneralAffairsApprover =
+        currentProfile?.is_general_affairs_approver === 1 ||
+        currentProfile?.is_general_affairs_approver === true;
+      const nextLeaderTeamIds = new Set(
+        ((teamLeaderData ?? []) as TeamLeaderRow[]).map((leader) => leader.team_id)
+      );
+      const nextIsTeamLeader = nextLeaderTeamIds.size > 0;
+      const nextApprovalRequests = (approvalRequestData ?? []) as ApprovalRequestRow[];
+      const approvalRequestIds = nextApprovalRequests.map((row) => row.id);
+
+      const { data: approvalStepData, error: approvalStepError } =
+        approvalRequestIds.length > 0
+          ? await supabase
+              .from("approval_request_step")
+              .select(
+                "id,approval_request_id,step_no,step_name,approver_type,approver_profile_id,approval_status,reviewed_by,reviewed_at"
+              )
+              .in("approval_request_id", approvalRequestIds)
+              .order("step_no", { ascending: true })
+              .order("created_at", { ascending: true })
+          : { data: [], error: null };
+
+      if (approvalStepError) throw new Error(approvalStepError.message);
+
+      setCurrentProfileId(profileId);
+      setIsAdmin(nextIsAdmin);
+      setIsTeamLeader(nextIsTeamLeader);
+      setIsGeneralAffairsApprover(nextIsGeneralAffairsApprover);
+      setHasApprovalAccess(
+        nextIsAdmin ||
+          nextIsTeamLeader ||
+          nextIsGeneralAffairsApprover ||
+          canAccessData === true ||
+          initialHasApprovalAccess
+      );
+      setLeaderTeamIds(nextLeaderTeamIds);
       setExpenseRows((expenseData ?? []) as ExpenseRow[]);
       setProfiles((profileData ?? []) as ProfileRow[]);
       setProfileJobs((profileJobData ?? []) as ProfileJobRow[]);
@@ -279,16 +382,26 @@ export default function ExpensesManagementClient() {
       setProjects((projectData ?? []) as ProjectRow[]);
       setTeams((teamData ?? []) as TeamRow[]);
       setProfileTeams((profileTeamData ?? []) as ProfileTeamRow[]);
+      setApprovalRequestRows(nextApprovalRequests);
+      setApprovalRequestStepRows((approvalStepData ?? []) as ApprovalRequestStepRow[]);
     } catch (error) {
+      setHasApprovalAccess(false);
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
     }
-  }, [displayMonth, supabase]);
+  }, [displayMonth, initialHasApprovalAccess, supabase]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!loading && activeMainTab === "employee" && !isAdmin && !isTeamLeader) {
+      setActiveMainTab("request");
+      setSelectedProfileId("");
+    }
+  }, [activeMainTab, isAdmin, isTeamLeader, loading]);
 
   const leaderEffectiveTeamIds = useMemo(() => {
     const result = new Set(leaderTeamIds);
@@ -325,11 +438,53 @@ export default function ExpensesManagementClient() {
     return profiles.filter((profile) => leaderManagedProfileIds.has(profile.id));
   }, [isAdmin, leaderManagedProfileIds, profiles]);
 
+  const profileNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const profile of profiles) {
+      map.set(profile.id, fullName(profile) || "-");
+    }
+    return map;
+  }, [profiles]);
 
-  const visibleExpenseRows = useMemo(() => {
-    if (isAdmin) return expenseRows;
-    return expenseRows.filter((row) => leaderManagedProfileIds.has(row.profile_id));
-  }, [expenseRows, isAdmin, leaderManagedProfileIds]);
+  const approvalRequestByTargetId = useMemo(() => {
+    const map = new Map<string, ApprovalRequestRow>();
+    for (const row of approvalRequestRows) {
+      map.set(row.target_id, row);
+    }
+    return map;
+  }, [approvalRequestRows]);
+
+  const approvalStepsByRequestId = useMemo(() => {
+    const map = new Map<string, ApprovalRequestStepRow[]>();
+    for (const row of approvalRequestStepRows) {
+      const current = map.get(row.approval_request_id) ?? [];
+      current.push(row);
+      map.set(row.approval_request_id, current);
+    }
+    return map;
+  }, [approvalRequestStepRows]);
+
+  const isApprovalFlowRelatedToCurrentUser = useCallback(
+    (approvalFlow: ApprovalRequestRow | null) => {
+      if (!approvalFlow || !currentProfileId) return false;
+      if (approvalFlow.applicant_profile_id === currentProfileId) return true;
+
+      const steps = approvalStepsByRequestId.get(approvalFlow.id) ?? [];
+      if (steps.some((step) => step.approver_profile_id === currentProfileId)) return true;
+
+      const hasGeneralAffairsStep = steps.some((step) => step.step_no === 2);
+      return isGeneralAffairsApprover && (approvalFlow.status === 2 || hasGeneralAffairsStep);
+    },
+    [approvalStepsByRequestId, currentProfileId, isGeneralAffairsApprover]
+  );
+
+  const canSeeRequest = useCallback(
+    (profileId: string, approvalFlow: ApprovalRequestRow | null) => {
+      if (isAdmin || leaderManagedProfileIds.has(profileId)) return true;
+      return isApprovalFlowRelatedToCurrentUser(approvalFlow);
+    },
+    [isAdmin, isApprovalFlowRelatedToCurrentUser, leaderManagedProfileIds]
+  );
 
   const groupedRequests = useMemo<GroupedExpenseRequest[]>(() => {
     const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
@@ -337,7 +492,10 @@ export default function ExpensesManagementClient() {
     const teamMap = new Map(teams.map((team) => [team.id, team]));
     const map = new Map<string, GroupedExpenseRequest>();
 
-    for (const row of visibleExpenseRows) {
+    for (const row of expenseRows) {
+      const approvalFlow = approvalRequestByTargetId.get(row.request_group_id) ?? null;
+      if (!canSeeRequest(row.profile_id, approvalFlow)) continue;
+
       const current = map.get(row.request_group_id);
       const amount = Number(row.amount ?? 0);
       const invoice = row.invoice === true || row.invoice === 1;
@@ -353,6 +511,7 @@ export default function ExpensesManagementClient() {
         map.set(row.request_group_id, {
           requestGroupId: row.request_group_id,
           profileId: row.profile_id,
+          approvalFlow,
           applicantName: fullName(profileMap.get(row.profile_id)),
           createdAt: row.created_at,
           applicationStatus: row.application_status,
@@ -402,7 +561,7 @@ export default function ExpensesManagementClient() {
 
     result.sort((a, b) => b.createdAt.localeCompare(a.createdAt, "ja"));
     return result;
-  }, [profiles, projects, teams, visibleExpenseRows]);
+  }, [approvalRequestByTargetId, canSeeRequest, expenseRows, profiles, projects, teams]);
 
   const employeeSummaries = useMemo<EmployeeSummaryRow[]>(() => {
     const jobMap = new Map(jobs.map((job) => [job.id, job.name]));
@@ -463,6 +622,109 @@ export default function ExpensesManagementClient() {
       matchesExpenseTypeFilter(group.expenseType, expenseTypeFilter)
     );
   }, [expenseTypeFilter, groupedRequests]);
+
+  const canReviewRequest = useCallback(
+    (group: GroupedExpenseRequest) => {
+      if (!currentProfileId) return false;
+
+      const approvalFlow = group.approvalFlow;
+      if (!approvalFlow) {
+        return (
+          group.applicationStatus === 0 &&
+          (isAdmin || leaderManagedProfileIds.has(group.profileId))
+        );
+      }
+
+      if (![1, 2].includes(approvalFlow.status)) return false;
+      if (isAdmin) return true;
+
+      const currentStepRows = (approvalStepsByRequestId.get(approvalFlow.id) ?? []).filter(
+        (step) => step.step_no === approvalFlow.current_step_no
+      );
+
+      if (currentStepRows.some((step) => step.approver_profile_id)) {
+        return currentStepRows.some(
+          (step) =>
+            step.approver_profile_id === currentProfileId && step.approval_status === 1
+        );
+      }
+
+      return (
+        approvalFlow.current_step_no === 1 &&
+        leaderManagedProfileIds.has(group.profileId)
+      );
+    },
+    [approvalStepsByRequestId, currentProfileId, isAdmin, leaderManagedProfileIds]
+  );
+
+  const getActionNotice = useCallback(
+    (group: GroupedExpenseRequest) => {
+      const approvalFlow = group.approvalFlow;
+      if (!approvalFlow) {
+        return group.applicationStatus === 0
+          ? "現在の承認者ではありません。"
+          : "この申請は完了しています。";
+      }
+
+      if ([3, 4, 5].includes(approvalFlow.status)) {
+        return "この申請は完了しています。";
+      }
+
+      const currentStepRows = (approvalStepsByRequestId.get(approvalFlow.id) ?? []).filter(
+        (step) => step.step_no === approvalFlow.current_step_no
+      );
+      const myStep = currentStepRows.find(
+        (step) => step.approver_profile_id === currentProfileId
+      );
+
+      if (myStep && myStep.approval_status !== 1) {
+        return "あなたの対応は完了しています。他の承認者の対応待ちです。";
+      }
+
+      if (approvalFlow.current_step_no === 1) {
+        return "STEP 1 の承認者の対応待ちです。";
+      }
+
+      if (approvalFlow.current_step_no === 2) {
+        return "STEP 2 の総務承認者の対応待ちです。";
+      }
+
+      return "現在の承認者ではありません。";
+    },
+    [approvalStepsByRequestId, currentProfileId]
+  );
+
+  const renderApprovalFlowSummary = useCallback(
+    (approvalFlow: ApprovalRequestRow | null) => {
+      if (!approvalFlow) return null;
+
+      const steps = approvalStepsByRequestId.get(approvalFlow.id) ?? [];
+      const step1Rows = steps.filter((step) => step.step_no === 1);
+      const step2Rows = steps.filter((step) => step.step_no === 2);
+
+      const renderStepMember = (step: ApprovalRequestStepRow) => {
+        const profileId = step.approver_profile_id ?? step.reviewed_by;
+        const name = profileId ? profileNameById.get(profileId) ?? "-" : "総務部";
+        const status = APPROVAL_STEP_STATUS_LABELS[step.approval_status] ?? String(step.approval_status);
+        return `${name}（${status}）`;
+      };
+
+      return (
+        <div className={styles.approvalFlowBlock}>
+          <div className={styles.approvalFlowTitle}>承認フロー</div>
+          <div className={styles.approvalFlowRow}>
+            <span className={styles.approvalFlowStepLabel}>STEP 1</span>
+            <span>{step1Rows.length > 0 ? step1Rows.map(renderStepMember).join("、") : "-"}</span>
+          </div>
+          <div className={styles.approvalFlowRow}>
+            <span className={styles.approvalFlowStepLabel}>STEP 2</span>
+            <span>{step2Rows.length > 0 ? step2Rows.map(renderStepMember).join("、") : "なし"}</span>
+          </div>
+        </div>
+      );
+    },
+    [approvalStepsByRequestId, profileNameById]
+  );
 
   const teamSummaryHref = useMemo(() => {
     const params = new URLSearchParams({
@@ -548,9 +810,19 @@ export default function ExpensesManagementClient() {
                 <div className={styles.requestMeta}>案件 / 部門：{group.targetLabel || "-"}</div>
               </div>
 
-              <div className={`${styles.statusBadge} ${getStatusClass(group.applicationStatus)}`}>
-                {APPLICATION_STATUS_LABELS[group.applicationStatus] ?? String(group.applicationStatus)}
-              </div>
+              {group.approvalFlow ? (
+                <div
+                  className={`${styles.statusBadge} ${getApprovalFlowStatusClass(group.approvalFlow.status)}`}
+                >
+                  {APPROVAL_FLOW_STATUS_LABELS[group.approvalFlow.status] ??
+                    String(group.approvalFlow.status)}
+                </div>
+              ) : (
+                <div className={`${styles.statusBadge} ${getStatusClass(group.applicationStatus)}`}>
+                  {APPLICATION_STATUS_LABELS[group.applicationStatus] ??
+                    String(group.applicationStatus)}
+                </div>
+              )}
             </div>
 
             <div className={styles.requestItems}>
@@ -582,32 +854,38 @@ export default function ExpensesManagementClient() {
               ))}
             </div>
 
-            <div className={styles.actionRow}>
-              <button
-                type="button"
-                className={styles.actionButton}
-                disabled={savingGroupId === group.requestGroupId}
-                onClick={() => updateApplicationStatus(group.requestGroupId, 1)}
-              >
-                承認
-              </button>
-              <button
-                type="button"
-                className={styles.actionButton}
-                disabled={savingGroupId === group.requestGroupId}
-                onClick={() => updateApplicationStatus(group.requestGroupId, 2)}
-              >
-                却下
-              </button>
-              <button
-                type="button"
-                className={styles.actionButton}
-                disabled={savingGroupId === group.requestGroupId}
-                onClick={() => updateApplicationStatus(group.requestGroupId, 3)}
-              >
-                取消
-              </button>
-            </div>
+            {renderApprovalFlowSummary(group.approvalFlow)}
+
+            {canReviewRequest(group) ? (
+              <div className={styles.actionRow}>
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  disabled={savingGroupId === group.requestGroupId}
+                  onClick={() => updateApplicationStatus(group.requestGroupId, 1)}
+                >
+                  承認
+                </button>
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  disabled={savingGroupId === group.requestGroupId}
+                  onClick={() => updateApplicationStatus(group.requestGroupId, 2)}
+                >
+                  却下
+                </button>
+                <button
+                  type="button"
+                  className={styles.actionButton}
+                  disabled={savingGroupId === group.requestGroupId}
+                  onClick={() => updateApplicationStatus(group.requestGroupId, 3)}
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <div className={styles.actionNotice}>{getActionNotice(group)}</div>
+            )}
           </div>
         ))}
       </div>
@@ -636,19 +914,23 @@ export default function ExpensesManagementClient() {
         >
           ›
         </button>
-        <Link href={teamSummaryHref} className={styles.teamSummaryButton}>
-          部門ごとの経費総額確認
-        </Link>
+        {(isAdmin || isTeamLeader) && (
+          <Link href={teamSummaryHref} className={styles.teamSummaryButton}>
+            部門ごとの経費総額確認
+          </Link>
+        )}
       </div>
 
       <div className={styles.tabBar}>
-        <button
-          type="button"
-          className={`${styles.tabButton} ${activeMainTab === "employee" ? styles.tabButtonActive : ""}`}
-          onClick={() => setActiveMainTab("employee")}
-        >
-          社員一覧
-        </button>
+        {(isAdmin || isTeamLeader) && (
+          <button
+            type="button"
+            className={`${styles.tabButton} ${activeMainTab === "employee" ? styles.tabButtonActive : ""}`}
+            onClick={() => setActiveMainTab("employee")}
+          >
+            社員一覧
+          </button>
+        )}
         <button
           type="button"
           className={`${styles.tabButton} ${activeMainTab === "request" ? styles.tabButtonActive : ""}`}
@@ -660,9 +942,11 @@ export default function ExpensesManagementClient() {
 
       {message && <p className={styles.message}>{message}</p>}
 
-      {!loading && !isAdmin && !isTeamLeader ? (
+      {!loading && !hasApprovalAccess ? (
         <section className={styles.employeeSection}>
-          <div className={styles.emptyState}>管理者または所属組織リーダーのみ利用できます。</div>
+          <div className={styles.emptyState}>
+            管理者、所属組織リーダー、または経費申請の承認者のみ利用できます。
+          </div>
         </section>
       ) : activeMainTab === "employee" ? (
         <>

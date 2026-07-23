@@ -23,7 +23,13 @@ type Profile = {
   first_name: string | null;
   is_admin: number | null;
   is_general_affairs: number | null;
+  is_general_affairs_approver: number | null;
   status: number | null;
+  hire_date: string | null;
+  paid_leave_grant_date: string | null;
+  paid_leave_days: number | string | null;
+  scheduled_work_minutes: number | null;
+  has_break: boolean | null;
   created_at: string;
 };
 
@@ -173,6 +179,23 @@ function normalizeOperatingPersonMonths(value: string) {
   return value.trim();
 }
 
+function scheduledWorkMinutesToParts(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) {
+    return { hours: "", minutes: "" };
+  }
+
+  const safeValue = Math.max(0, Math.min(24 * 60, Math.trunc(value)));
+  return {
+    hours: String(Math.floor(safeValue / 60)),
+    minutes: String(safeValue % 60),
+  };
+}
+
+function nullableDate(value: string) {
+  const normalized = value.trim();
+  return normalized || null;
+}
+
 const TEMP_EMAIL_PATTERN = /^spreadsheet-[^@\s]+@example\.invalid$/i;
 const PAGE_SIZE = 20;
 
@@ -212,6 +235,7 @@ export default function EmployeeClient() {
   const [currentProfileId, setCurrentProfileId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isGeneralAffairs, setIsGeneralAffairs] = useState(false);
+  const [canManageEmploymentSettings, setCanManageEmploymentSettings] = useState(false);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -231,10 +255,17 @@ export default function EmployeeClient() {
   const [formFirstName, setFormFirstName] = useState("");
   const [formIsAdmin, setFormIsAdmin] = useState(false);
   const [formIsGeneralAffairs, setFormIsGeneralAffairs] = useState(false);
+  const [formIsGeneralAffairsApprover, setFormIsGeneralAffairsApprover] = useState(false);
   const [formStatus, setFormStatus] = useState("0");
   const [formTeamIds, setFormTeamIds] = useState<string[]>([""]);
   const [formJobIds, setFormJobIds] = useState<string[]>([""]);
   const [formOperatingPersonMonths, setFormOperatingPersonMonths] = useState("1");
+  const [formHireDate, setFormHireDate] = useState("");
+  const [formPaidLeaveGrantDate, setFormPaidLeaveGrantDate] = useState("");
+  const [formPaidLeaveDays, setFormPaidLeaveDays] = useState("");
+  const [formScheduledWorkHours, setFormScheduledWorkHours] = useState("");
+  const [formScheduledWorkMinutes, setFormScheduledWorkMinutes] = useState("");
+  const [formHasBreak, setFormHasBreak] = useState("");
   const [visibleStatuses, setVisibleStatuses] = useState<number[]>([0]);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [sortKey, setSortKey] = useState<EmployeeSortKey>("created_desc");
@@ -308,9 +339,36 @@ export default function EmployeeClient() {
       const authUserId = authData.user?.id;
       if (!authUserId) throw new Error("ログインユーザーを取得できません。再ログインしてください。");
 
+      const { data: resolvedProfileId, error: resolvedProfileError } = await supabase.rpc("current_profile_id");
+      if (resolvedProfileError) throw new Error(resolvedProfileError.message);
+
+      const currentProfileIdValue = typeof resolvedProfileId === "string" ? resolvedProfileId : authUserId;
+
+      const { data: canManageWorkSettings, error: canManageWorkSettingsError } = await supabase.rpc(
+        "can_manage_employee_work_settings",
+      );
+      if (canManageWorkSettingsError) throw new Error(canManageWorkSettingsError.message);
+
+      // Supabase の select() は、動的な文字列を渡すと型パーサーが
+      // ParserError を返すことがあるため、権限ごとにクエリを分岐させます。
+      const profileResult =
+        canManageWorkSettings === true
+          ? await supabase
+              .from("profiles_2")
+              .select("*")
+              .order("created_at", { ascending: false })
+          : await supabase
+              .from("profiles_2")
+              .select(
+                "id,email,last_name,first_name,is_admin,is_general_affairs,is_general_affairs_approver,status,created_at"
+              )
+              .order("created_at", { ascending: false });
+
+      const profileData = (profileResult.data ?? []) as unknown as Partial<Profile>[];
+      const profileError = profileResult.error;
+
       const [
         { data: currentProfile, error: currentProfileError },
-        { data: profileData, error: profileError },
         { data: teamData, error: teamError },
         { data: jobData, error: jobError },
         { data: profileTeamData, error: profileTeamError },
@@ -318,11 +376,7 @@ export default function EmployeeClient() {
         { data: manMonthData, error: manMonthError },
         { data: teamLeaderData, error: teamLeaderError },
       ] = await Promise.all([
-        supabase.from("profiles_2").select("id,is_admin,is_general_affairs").eq("id", authUserId).maybeSingle(),
-        supabase
-          .from("profiles_2")
-          .select("id,email,last_name,first_name,is_admin,is_general_affairs,status,created_at")
-          .order("created_at", { ascending: false }),
+        supabase.from("profiles_2").select("id,is_admin,is_general_affairs").eq("id", currentProfileIdValue).maybeSingle(),
         supabase.from("team").select("id,parent_id,name").order("created_at", { ascending: true }),
         supabase.from("job").select("id,name").order("created_at", { ascending: true }),
         supabase.from("profile_team").select("profile_id,team_id"),
@@ -347,15 +401,31 @@ export default function EmployeeClient() {
       const currentIsGeneralAffairs = currentProfile?.is_general_affairs === 1;
       const nextTeamLeaders = (teamLeaderData ?? []) as TeamLeader[];
       const currentLeaderTeamIds = nextTeamLeaders
-        .filter((leader) => leader.profile_id === authUserId)
+        .filter((leader) => leader.profile_id === currentProfileIdValue)
         .map((leader) => leader.team_id);
 
-      setCurrentProfileId(authUserId);
+      setCurrentProfileId(currentProfileIdValue);
       setIsAdmin(currentIsAdmin);
       setIsGeneralAffairs(currentIsGeneralAffairs);
+      setCanManageEmploymentSettings(canManageWorkSettings === true);
       setIsTeamLeader(currentLeaderTeamIds.length > 0);
 
-      const nextProfiles = (profileData ?? []) as Profile[];
+      const nextProfiles = profileData.map((profile) => ({
+        id: profile.id ?? "",
+        email: profile.email ?? null,
+        last_name: profile.last_name ?? null,
+        first_name: profile.first_name ?? null,
+        is_admin: profile.is_admin ?? null,
+        is_general_affairs: profile.is_general_affairs ?? null,
+        is_general_affairs_approver: profile.is_general_affairs_approver ?? null,
+        status: profile.status ?? null,
+        hire_date: profile.hire_date ?? null,
+        paid_leave_grant_date: profile.paid_leave_grant_date ?? null,
+        paid_leave_days: profile.paid_leave_days ?? null,
+        scheduled_work_minutes: profile.scheduled_work_minutes ?? null,
+        has_break: profile.has_break ?? null,
+        created_at: profile.created_at ?? "",
+      })) satisfies Profile[];
       const nextTeams = (teamData ?? []) as Team[];
       const nextJobs = (jobData ?? []) as Job[];
       const nextProfileTeams = (profileTeamData ?? []) as ProfileTeam[];
@@ -436,13 +506,15 @@ export default function EmployeeClient() {
   }, [leaderEffectiveTeamIds, profileTeams]);
 
   const canManageEmployee = isAdmin || isGeneralAffairs;
+  const canOpenEmployeeEdit = canManageEmployee || canManageEmploymentSettings;
+  const canEditGeneralEmployeeFields = canManageEmployee;
 
   const canManageMenuForProfile = (profileId: string) => {
     if (canManageEmployee) return true;
     return leaderManagedProfileIds.has(profileId);
   };
 
-  const showOperationColumn = canManageEmployee || isTeamLeader;
+  const showOperationColumn = canOpenEmployeeEdit || isTeamLeader;
 
   const rows = useMemo<EmployeeRow[]>(() => {
     const teamPathHelper = buildTeamPathMap(teams);
@@ -478,7 +550,7 @@ export default function EmployeeClient() {
 
     return profiles
       .filter((profile) => {
-        if (!canManageEmployee && !leaderManagedProfileIds.has(profile.id)) return false;
+        if (!canOpenEmployeeEdit && !leaderManagedProfileIds.has(profile.id)) return false;
         const status = normalizeStatusValue(profile.status);
         return visibleStatuses.includes(status) && !isBlank(profile.last_name) && !isBlank(profile.first_name);
       })
@@ -502,7 +574,7 @@ export default function EmployeeClient() {
         status: normalizeStatusValue(profile.status),
         created_at: profile.created_at,
       }));
-  }, [canManageEmployee, jobs, leaderManagedProfileIds, profileJobs, profiles, profileTeams, teams, visibleStatuses]);
+  }, [canOpenEmployeeEdit, jobs, leaderManagedProfileIds, profileJobs, profiles, profileTeams, teams, visibleStatuses]);
 
   const filteredRows = useMemo(() => {
     const normalizedKeyword = normalizeSearchText(searchKeyword);
@@ -632,10 +704,17 @@ export default function EmployeeClient() {
     setFormFirstName("");
     setFormIsAdmin(false);
     setFormIsGeneralAffairs(false);
+    setFormIsGeneralAffairsApprover(false);
     setFormStatus("0");
     setFormTeamIds([""]);
     setFormJobIds([""]);
     setFormOperatingPersonMonths("1");
+    setFormHireDate("");
+    setFormPaidLeaveGrantDate("");
+    setFormPaidLeaveDays("");
+    setFormScheduledWorkHours("");
+    setFormScheduledWorkMinutes("");
+    setFormHasBreak("");
     setEditingProfileId(null);
   };
 
@@ -653,7 +732,7 @@ export default function EmployeeClient() {
   };
 
   const openEdit = (profileId: string) => {
-    if (!canManageEmployee) return;
+    if (!canOpenEmployeeEdit) return;
 
     setErrorMsg("");
     setMode("edit");
@@ -670,6 +749,7 @@ export default function EmployeeClient() {
     setFormFirstName(profile.first_name ?? "");
     setFormIsAdmin(profile.is_admin === 1);
     setFormIsGeneralAffairs(profile.is_general_affairs === 1);
+    setFormIsGeneralAffairsApprover(profile.is_general_affairs_approver === 1);
     setFormStatus(String(profile.status ?? 0));
 
     const nextTeamIds = profileTeams
@@ -688,6 +768,14 @@ export default function EmployeeClient() {
         ? String(currentManMonth.operating_person_months)
         : "1"
     );
+
+    setFormHireDate(profile.hire_date ?? "");
+    setFormPaidLeaveGrantDate(profile.paid_leave_grant_date ?? "");
+    setFormPaidLeaveDays(profile.paid_leave_days != null ? String(profile.paid_leave_days) : "");
+    const scheduledWorkParts = scheduledWorkMinutesToParts(profile.scheduled_work_minutes);
+    setFormScheduledWorkHours(scheduledWorkParts.hours);
+    setFormScheduledWorkMinutes(scheduledWorkParts.minutes);
+    setFormHasBreak(profile.has_break == null ? "" : profile.has_break ? "1" : "0");
     setOpen(true);
   };
 
@@ -845,23 +933,52 @@ export default function EmployeeClient() {
 
   const validate = () => {
     if (mode === "create") {
+      if (!canEditGeneralEmployeeFields) return "新規社員登録の権限がありません。";
       if (!formEmail) return "未登録ユーザーを選択してください。";
       if (!unregisteredProfileMap.has(formEmail)) return "未登録ユーザーの中から選択してください。";
     }
 
     if (!getSelectedProfileId()) return "対象ユーザーを取得できません。";
-    if (!formLastName.trim()) return "姓を入力してください。";
-    if (!formFirstName.trim()) return "名を入力してください。";
 
-    const teamIds = formTeamIds.map((item) => item.trim()).filter(Boolean);
-    if (teamIds.length !== uniq(teamIds).length) return "所属組織が重複しています。";
+    if (canEditGeneralEmployeeFields) {
+      if (!formLastName.trim()) return "姓を入力してください。";
+      if (!formFirstName.trim()) return "名を入力してください。";
 
-    const jobIds = formJobIds.map((item) => item.trim()).filter(Boolean);
-    if (jobIds.length !== uniq(jobIds).length) return "職種が重複しています。";
+      const teamIds = formTeamIds.map((item) => item.trim()).filter(Boolean);
+      if (teamIds.length !== uniq(teamIds).length) return "所属組織が重複しています。";
 
-    const operatingPersonMonths = Number(normalizeOperatingPersonMonths(formOperatingPersonMonths));
-    if (!Number.isFinite(operatingPersonMonths) || operatingPersonMonths < 0) {
-      return "稼働人月は0以上の数値で入力してください。";
+      const jobIds = formJobIds.map((item) => item.trim()).filter(Boolean);
+      if (jobIds.length !== uniq(jobIds).length) return "職種が重複しています。";
+
+      const operatingPersonMonths = Number(normalizeOperatingPersonMonths(formOperatingPersonMonths));
+      if (!Number.isFinite(operatingPersonMonths) || operatingPersonMonths < 0) {
+        return "稼働人月は0以上の数値で入力してください。";
+      }
+    }
+
+    if (canManageEmploymentSettings) {
+      if (formPaidLeaveDays.trim()) {
+        const paidLeaveDays = Number(formPaidLeaveDays);
+        if (!Number.isFinite(paidLeaveDays) || paidLeaveDays < 0) {
+          return "有給日数は0以上の数値で入力してください。";
+        }
+      }
+
+      const hasScheduledHours = formScheduledWorkHours.trim() !== "";
+      const hasScheduledMinutes = formScheduledWorkMinutes.trim() !== "";
+      if (hasScheduledHours || hasScheduledMinutes) {
+        const hours = Number(formScheduledWorkHours || "0");
+        const minutes = Number(formScheduledWorkMinutes || "0");
+        if (!Number.isInteger(hours) || hours < 0 || hours > 24) {
+          return "所定労働時間の時間は0〜24の整数で入力してください。";
+        }
+        if (!Number.isInteger(minutes) || minutes < 0 || minutes > 59) {
+          return "所定労働時間の分は0〜59の整数で入力してください。";
+        }
+        if (hours * 60 + minutes > 24 * 60) {
+          return "所定労働時間は24時間以内で入力してください。";
+        }
+      }
     }
 
     return null;
@@ -874,20 +991,17 @@ export default function EmployeeClient() {
     const authUserId = authData.user?.id;
     if (!authUserId) throw new Error("ログインユーザーを取得できません。再ログインしてください。");
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles_2")
-      .select("id")
-      .eq("id", authUserId)
-      .maybeSingle();
+    const { data: resolvedProfileId, error: resolvedProfileError } = await supabase.rpc("current_profile_id");
+    if (resolvedProfileError) throw new Error(resolvedProfileError.message);
 
-    if (profileError) throw new Error(profileError.message);
-    if (!profile?.id) throw new Error("更新者プロフィールが見つかりません。");
+    const profileId = typeof resolvedProfileId === "string" ? resolvedProfileId : authUserId;
+    if (!profileId) throw new Error("更新者プロフィールが見つかりません。");
 
-    return profile.id;
+    return profileId;
   };
 
   const save = async () => {
-    if (!canManageEmployee) {
+    if (!canOpenEmployeeEdit) {
       setErrorMsg("編集権限がありません。");
       return;
     }
@@ -911,73 +1025,99 @@ export default function EmployeeClient() {
       const teamIds = expandTeamIdsWithParents(selectedTeamIds, teams);
       const jobIds = uniq(formJobIds.map((item) => item.trim()).filter(Boolean));
 
-      const { error: profileUpdateError } = await supabase
-        .from("profiles_2")
-        .update({
+      const profileUpdatePayload: Record<string, unknown> = {
+        updated_by: updaterId,
+      };
+
+      if (canEditGeneralEmployeeFields) {
+        Object.assign(profileUpdatePayload, {
           last_name: formLastName.trim(),
           first_name: formFirstName.trim(),
           ...(isAdmin ? { is_admin: formIsAdmin ? 1 : 0 } : {}),
           is_general_affairs: formIsGeneralAffairs ? 1 : 0,
+          is_general_affairs_approver: formIsGeneralAffairsApprover ? 1 : 0,
           status: statusLabelToValue(formStatus),
-          updated_by: updaterId,
-        })
+        });
+      }
+
+      if (canManageEmploymentSettings) {
+        const hasScheduledWorkValue =
+          formScheduledWorkHours.trim() !== "" || formScheduledWorkMinutes.trim() !== "";
+        const scheduledWorkMinutes = hasScheduledWorkValue
+          ? Number(formScheduledWorkHours || "0") * 60 + Number(formScheduledWorkMinutes || "0")
+          : null;
+
+        Object.assign(profileUpdatePayload, {
+          hire_date: nullableDate(formHireDate),
+          paid_leave_grant_date: nullableDate(formPaidLeaveGrantDate),
+          paid_leave_days: formPaidLeaveDays.trim() ? Number(formPaidLeaveDays) : null,
+          scheduled_work_minutes: scheduledWorkMinutes,
+          has_break: formHasBreak === "" ? null : formHasBreak === "1",
+        });
+      }
+
+      const { error: profileUpdateError } = await supabase
+        .from("profiles_2")
+        .update(profileUpdatePayload)
         .eq("id", profileId);
 
       if (profileUpdateError) throw new Error(profileUpdateError.message);
 
-      const { error: deleteTeamError } = await supabase.from("profile_team").delete().eq("profile_id", profileId);
-      if (deleteTeamError) throw new Error(deleteTeamError.message);
+      if (canEditGeneralEmployeeFields) {
+        const { error: deleteTeamError } = await supabase.from("profile_team").delete().eq("profile_id", profileId);
+        if (deleteTeamError) throw new Error(deleteTeamError.message);
 
-      if (teamIds.length > 0) {
-        const teamPayload = teamIds.map((teamId) => ({
-          profile_id: profileId,
-          team_id: teamId,
-          updated_by: updaterId,
-        }));
+        if (teamIds.length > 0) {
+          const teamPayload = teamIds.map((teamId) => ({
+            profile_id: profileId,
+            team_id: teamId,
+            updated_by: updaterId,
+          }));
 
-        const { error: insertTeamError } = await supabase.from("profile_team").insert(teamPayload);
-        if (insertTeamError) throw new Error(insertTeamError.message);
-      }
+          const { error: insertTeamError } = await supabase.from("profile_team").insert(teamPayload);
+          if (insertTeamError) throw new Error(insertTeamError.message);
+        }
 
-      const { error: deleteJobError } = await supabase.from("profile_job").delete().eq("profile_id", profileId);
-      if (deleteJobError) throw new Error(deleteJobError.message);
+        const { error: deleteJobError } = await supabase.from("profile_job").delete().eq("profile_id", profileId);
+        if (deleteJobError) throw new Error(deleteJobError.message);
 
-      if (jobIds.length > 0) {
-        const jobPayload = jobIds.map((jobId) => ({
-          profile_id: profileId,
-          job_id: jobId,
-          updated_by: updaterId,
-        }));
+        if (jobIds.length > 0) {
+          const jobPayload = jobIds.map((jobId) => ({
+            profile_id: profileId,
+            job_id: jobId,
+            updated_by: updaterId,
+          }));
 
-        const { error: insertJobError } = await supabase.from("profile_job").insert(jobPayload);
-        if (insertJobError) throw new Error(insertJobError.message);
-      }
+          const { error: insertJobError } = await supabase.from("profile_job").insert(jobPayload);
+          if (insertJobError) throw new Error(insertJobError.message);
+        }
 
-      const normalizedOperatingPersonMonths = Number(normalizeOperatingPersonMonths(formOperatingPersonMonths));
-      const currentTargetYearMonth = getCurrentTargetYearMonth();
+        const normalizedOperatingPersonMonths = Number(normalizeOperatingPersonMonths(formOperatingPersonMonths));
+        const currentTargetYearMonth = getCurrentTargetYearMonth();
 
-      if (normalizedOperatingPersonMonths === 1) {
-        const { error: deleteManMonthError } = await supabase
-          .from("man_month")
-          .delete()
-          .eq("profile_id", profileId)
-          .eq("target_year_month", currentTargetYearMonth);
+        if (normalizedOperatingPersonMonths === 1) {
+          const { error: deleteManMonthError } = await supabase
+            .from("man_month")
+            .delete()
+            .eq("profile_id", profileId)
+            .eq("target_year_month", currentTargetYearMonth);
 
-        if (deleteManMonthError) throw new Error(deleteManMonthError.message);
-      } else {
-        const { error: upsertManMonthError } = await supabase
-          .from("man_month")
-          .upsert(
-            {
-              profile_id: profileId,
-              target_year_month: currentTargetYearMonth,
-              operating_person_months: normalizedOperatingPersonMonths,
-              updated_by: updaterId,
-            },
-            { onConflict: "profile_id,target_year_month" }
-          );
+          if (deleteManMonthError) throw new Error(deleteManMonthError.message);
+        } else {
+          const { error: upsertManMonthError } = await supabase
+            .from("man_month")
+            .upsert(
+              {
+                profile_id: profileId,
+                target_year_month: currentTargetYearMonth,
+                operating_person_months: normalizedOperatingPersonMonths,
+                updated_by: updaterId,
+              },
+              { onConflict: "profile_id,target_year_month" }
+            );
 
-        if (upsertManMonthError) throw new Error(upsertManMonthError.message);
+          if (upsertManMonthError) throw new Error(upsertManMonthError.message);
+        }
       }
 
       closeModal();
@@ -995,6 +1135,11 @@ export default function EmployeeClient() {
         <h1 className={styles.pageTitle}>社員一覧</h1>
 
         <div className={styles.pageHeaderLinks}>
+          {canManageEmploymentSettings && (
+            <Link href="/employee-report" className={styles.btnOutline}>
+              帳票出力
+            </Link>
+          )}
           {canManageEmployee && (
             <button type="button" onClick={openCreate} className={styles.btnRed} disabled={saving}>
               ＋ 新規社員登録
@@ -1139,7 +1284,7 @@ export default function EmployeeClient() {
                     {showOperationColumn && (
                       <td className={styles.tdRight}>
                         <div className={styles.operationButtons}>
-                          {canManageEmployee && (
+                          {canOpenEmployeeEdit && (
                             <button
                               type="button"
                               onClick={() => openEdit(row.profile_id)}
@@ -1192,7 +1337,7 @@ export default function EmployeeClient() {
         </button>
       </div>
 
-      {open && canManageEmployee && (
+      {open && canOpenEmployeeEdit && (
         <div className={styles.modalOverlay} onClick={closeModal}>
           <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
@@ -1203,6 +1348,9 @@ export default function EmployeeClient() {
             </div>
 
             <div className={styles.modalForm}>
+              {!canEditGeneralEmployeeFields && canManageEmploymentSettings && (
+                <p className={styles.limitedEditNotice}>勤務・有給情報のみ編集できます。</p>
+              )}
               <div className={styles.formRow}>
                 <div className={styles.formLabel}>メール</div>
                 <div>
@@ -1211,6 +1359,7 @@ export default function EmployeeClient() {
                       value={formEmail}
                       onChange={(event) => setFormEmail(event.target.value)}
                       className={styles.select}
+                      disabled={!canEditGeneralEmployeeFields}
                     >
                       <option value="">未登録ユーザーを選択してください</option>
                       {unregisteredProfiles.map((profile) => (
@@ -1231,6 +1380,7 @@ export default function EmployeeClient() {
                   value={formLastName}
                   onChange={(event) => setFormLastName(event.target.value)}
                   className={styles.input}
+                  readOnly={!canEditGeneralEmployeeFields}
                 />
               </div>
 
@@ -1240,6 +1390,7 @@ export default function EmployeeClient() {
                   value={formFirstName}
                   onChange={(event) => setFormFirstName(event.target.value)}
                   className={styles.input}
+                  readOnly={!canEditGeneralEmployeeFields}
                 />
               </div>
 
@@ -1264,8 +1415,22 @@ export default function EmployeeClient() {
                     type="checkbox"
                     checked={formIsGeneralAffairs}
                     onChange={(event) => setFormIsGeneralAffairs(event.target.checked)}
+                    disabled={!canEditGeneralEmployeeFields}
                   />
                   <span>総務権限を付与する</span>
+                </label>
+              </div>
+
+              <div className={styles.formRow}>
+                <div className={styles.formLabel}>総務承認者権限</div>
+                <label className={styles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    checked={formIsGeneralAffairsApprover}
+                    onChange={(event) => setFormIsGeneralAffairsApprover(event.target.checked)}
+                    disabled={!canEditGeneralEmployeeFields}
+                  />
+                  <span>総務承認者権限を付与する</span>
                 </label>
               </div>
 
@@ -1275,6 +1440,7 @@ export default function EmployeeClient() {
                   value={formStatus}
                   onChange={(event) => setFormStatus(event.target.value)}
                   className={styles.select}
+                  disabled={!canEditGeneralEmployeeFields}
                 >
                   <option value="0">在籍中</option>
                   <option value="1">休職中</option>
@@ -1291,17 +1457,110 @@ export default function EmployeeClient() {
                     className={styles.input}
                     inputMode="decimal"
                     placeholder="1"
+                    readOnly={!canEditGeneralEmployeeFields}
                   />
                   <p className={styles.formHelpText}>当月の稼働人月を入力します。</p>
                 </div>
               </div>
 
-              <hr className={styles.divider} />
+              {canManageEmploymentSettings && (
+                <>
+                  <hr className={styles.divider} />
+
+                  <div className={styles.protectedSection}>
+                    <div className={styles.protectedSectionHeader}>
+                      <strong>勤務・有給情報</strong>
+                      <span className={styles.permissionBadge}>管理者・総務チームのみ表示・編集可</span>
+                    </div>
+
+                    <div className={styles.formRow}>
+                      <div className={styles.formLabel}>入社日</div>
+                      <input
+                        type="date"
+                        value={formHireDate}
+                        onChange={(event) => setFormHireDate(event.target.value)}
+                        className={styles.input}
+                      />
+                    </div>
+
+                    <div className={styles.formRow}>
+                      <div className={styles.formLabel}>有給発生日</div>
+                      <input
+                        type="date"
+                        value={formPaidLeaveGrantDate}
+                        onChange={(event) => setFormPaidLeaveGrantDate(event.target.value)}
+                        className={styles.input}
+                      />
+                    </div>
+
+                    <div className={styles.formRow}>
+                      <div className={styles.formLabel}>有給日数</div>
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={formPaidLeaveDays}
+                          onChange={(event) => setFormPaidLeaveDays(event.target.value)}
+                          className={styles.input}
+                          placeholder="例：10"
+                        />
+                        <p className={styles.formHelpText}>半日単位の場合は0.5で入力できます。</p>
+                      </div>
+                    </div>
+
+                    <div className={styles.formRow}>
+                      <div className={styles.formLabel}>所定労働時間</div>
+                      <div className={styles.durationInputs}>
+                        <label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="24"
+                            step="1"
+                            value={formScheduledWorkHours}
+                            onChange={(event) => setFormScheduledWorkHours(event.target.value)}
+                            className={styles.durationInput}
+                          />
+                          <span>時間</span>
+                        </label>
+                        <label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="59"
+                            step="1"
+                            value={formScheduledWorkMinutes}
+                            onChange={(event) => setFormScheduledWorkMinutes(event.target.value)}
+                            className={styles.durationInput}
+                          />
+                          <span>分</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className={styles.formRow}>
+                      <div className={styles.formLabel}>休憩時間有無</div>
+                      <select
+                        value={formHasBreak}
+                        onChange={(event) => setFormHasBreak(event.target.value)}
+                        className={styles.select}
+                      >
+                        <option value="">未設定</option>
+                        <option value="1">あり</option>
+                        <option value="0">なし</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <hr className={styles.divider} />
+                </>
+              )}
 
               <div className={styles.block}>
                 <div className={styles.blockHeader}>
                   <div className={styles.blockLabel}>所属組織</div>
-                  <button type="button" onClick={addTeamRow} className={styles.btnPlus} disabled={saving}>
+                  <button type="button" onClick={addTeamRow} className={styles.btnPlus} disabled={saving || !canEditGeneralEmployeeFields}>
                     ＋ 所属組織を追加
                   </button>
                 </div>
@@ -1312,6 +1571,7 @@ export default function EmployeeClient() {
                       value={teamId}
                       onChange={(event) => setTeamAt(index, event.target.value)}
                       className={styles.selectWide}
+                      disabled={!canEditGeneralEmployeeFields}
                     >
                       <option value="">選択してください（組織管理）</option>
                       {teamOptions.map((team) => (
@@ -1326,7 +1586,7 @@ export default function EmployeeClient() {
                         type="button"
                         onClick={() => removeTeamRow(index)}
                         className={styles.btnMini}
-                        disabled={saving}
+                        disabled={saving || !canEditGeneralEmployeeFields}
                       >
                         削除
                       </button>
@@ -1338,7 +1598,7 @@ export default function EmployeeClient() {
               <div className={styles.block}>
                 <div className={styles.blockHeader}>
                   <div className={styles.blockLabel}>職種</div>
-                  <button type="button" onClick={addJobRow} className={styles.btnPlus} disabled={saving}>
+                  <button type="button" onClick={addJobRow} className={styles.btnPlus} disabled={saving || !canEditGeneralEmployeeFields}>
                     ＋ 職種を追加
                   </button>
                 </div>
@@ -1349,6 +1609,7 @@ export default function EmployeeClient() {
                       value={jobId}
                       onChange={(event) => setJobAt(index, event.target.value)}
                       className={styles.selectWide}
+                      disabled={!canEditGeneralEmployeeFields}
                     >
                       <option value="">選択してください（職種管理）</option>
                       {jobOptions.map((job) => {
@@ -1366,7 +1627,7 @@ export default function EmployeeClient() {
                         type="button"
                         onClick={() => removeJobRow(index)}
                         className={styles.btnMini}
-                        disabled={saving}
+                        disabled={saving || !canEditGeneralEmployeeFields}
                       >
                         削除
                       </button>

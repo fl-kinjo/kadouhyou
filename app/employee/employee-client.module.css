@@ -111,6 +111,22 @@
   gap: 10px;
 }
 
+
+.btnOutline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 20px;
+  border: 1px solid #999;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-weight: 900;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
 .btnRed {
   border: none;
   background: #b00;
@@ -496,4 +512,68 @@
     width: 100%;
     min-width: 0;
   }
+}
+
+.protectedSection {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d7dde5;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.protectedSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.permissionBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.durationInputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.durationInputs label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.durationInput {
+  width: 88px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  box-sizing: border-box;
+  background: #fff;
+  font-size: 14px;
+}
+
+.limitedEditNotice {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 13px;
+  font-weight: 700;
 }

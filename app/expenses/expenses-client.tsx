@@ -16,6 +16,14 @@ type TeamRow = {
   department_code: string | null;
 };
 
+type ProfileOption = {
+  id: string;
+  last_name: string | null;
+  first_name: string | null;
+  email: string | null;
+  is_general_affairs_approver?: number | null;
+};
+
 type ExpenseRow = {
   id: string;
   project_id: string | null;
@@ -129,6 +137,23 @@ function formatTeamLabel(team: TeamRow | null) {
   return team.name;
 }
 
+function formatProfileName(profile: ProfileOption | null) {
+  if (!profile) return "-";
+  const name = `${profile.last_name ?? ""}${profile.first_name ? ` ${profile.first_name}` : ""}`.trim();
+  return name || profile.email || "-";
+}
+
+function mergeProfileOptions(current: ProfileOption[], next: ProfileOption[]) {
+  const map = new Map<string, ProfileOption>();
+  current.forEach((profile) => map.set(profile.id, profile));
+  next.forEach((profile) => map.set(profile.id, profile));
+  return Array.from(map.values());
+}
+
+function uniqueIds(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 function mergeProjects(current: ProjectRow[], next: ProjectRow[]) {
   const map = new Map<string, ProjectRow>();
   current.forEach((project) => map.set(project.id, project));
@@ -161,6 +186,19 @@ export default function ExpensesClient() {
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [details, setDetails] = useState<DetailFormRow[]>([createEmptyDetail()]);
 
+  const [profileOptions, setProfileOptions] = useState<ProfileOption[]>([]);
+  const [defaultStep1Approvers, setDefaultStep1Approvers] = useState<ProfileOption[]>([]);
+  const [generalAffairsApproverOptions, setGeneralAffairsApproverOptions] = useState<ProfileOption[]>([]);
+  const [approvalFlowModalOpen, setApprovalFlowModalOpen] = useState(false);
+  const [step1Approvers, setStep1Approvers] = useState<ProfileOption[]>([]);
+  const [shareApprovers, setShareApprovers] = useState<ProfileOption[]>([]);
+  const [generalAffairsApprovers, setGeneralAffairsApprovers] = useState<ProfileOption[]>([]);
+  const [shareSearchKeyword, setShareSearchKeyword] = useState("");
+  const [generalAffairsSearchKeyword, setGeneralAffairsSearchKeyword] = useState("");
+  const [shareSearchOpen, setShareSearchOpen] = useState(false);
+  const [generalAffairsSearchOpen, setGeneralAffairsSearchOpen] = useState(false);
+  const [showGeneralAffairsStep, setShowGeneralAffairsStep] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     setMessage("");
@@ -169,13 +207,18 @@ export default function ExpensesClient() {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
 
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
+      if (!authData.user?.id) throw new Error("ログインユーザーを取得できません。");
+
+      const { data: currentProfileId, error: currentProfileError } = await supabase.rpc("current_profile_id");
+      if (currentProfileError) throw new Error(currentProfileError.message);
+
+      const profileId = currentProfileId as string | null;
+      if (!profileId) throw new Error("ログイン中の社員情報を取得できません。");
 
       const { data: profileTeamData, error: profileTeamError } = await supabase
         .from("profile_team")
         .select("team_id")
-        .eq("profile_id", userId);
+        .eq("profile_id", profileId);
 
       if (profileTeamError) throw new Error(profileTeamError.message);
 
@@ -191,20 +234,35 @@ export default function ExpensesClient() {
             .order("name", { ascending: true })
         : Promise.resolve({ data: [], error: null });
 
-      const [{ data: teamData, error: teamError }, { data: expenseData, error: expenseError }] =
-        await Promise.all([
-          teamPromise,
-          supabase
-            .from("project_actual_cost")
-            .select(
-              "id,project_id,team_id,expense_type,expense_name,target_year_month,amount,expense_date,invoice,purpose,updated_at,updated_by,profile_id,category,application_status,request_group_id,receipt_file_path,receipt_file_name,receipt_mime_type,receipt_size_bytes"
-            )
-            .eq("profile_id", userId)
-            .order("expense_date", { ascending: false })
-            .order("updated_at", { ascending: false }),
-        ]);
+      const teamLeaderPromise = supabase.rpc("get_current_profile_team_leaders");
+
+      const [
+        { data: teamData, error: teamError },
+        { data: teamLeaderData, error: teamLeaderError },
+        { data: profileData, error: profileError },
+        { data: expenseData, error: expenseError },
+      ] = await Promise.all([
+        teamPromise,
+        teamLeaderPromise,
+        supabase
+          .from("profiles_2")
+          .select("id,last_name,first_name,email,is_general_affairs_approver,status")
+          .eq("status", 0)
+          .order("last_name", { ascending: true })
+          .order("first_name", { ascending: true }),
+        supabase
+          .from("project_actual_cost")
+          .select(
+            "id,project_id,team_id,expense_type,expense_name,target_year_month,amount,expense_date,invoice,purpose,updated_at,updated_by,profile_id,category,application_status,request_group_id,receipt_file_path,receipt_file_name,receipt_mime_type,receipt_size_bytes"
+          )
+          .eq("profile_id", profileId)
+          .order("expense_date", { ascending: false })
+          .order("updated_at", { ascending: false }),
+      ]);
 
       if (teamError) throw new Error(teamError.message);
+      if (teamLeaderError) throw new Error(teamLeaderError.message);
+      if (profileError) throw new Error(profileError.message);
       if (expenseError) throw new Error(expenseError.message);
 
       const nextExpenses = (expenseData ?? []) as ExpenseRow[];
@@ -223,8 +281,20 @@ export default function ExpensesClient() {
         expenseProjectRows = (expenseProjectData ?? []) as ProjectRow[];
       }
 
+      const allProfileRows = ((profileData ?? []) as ProfileOption[]).filter((profile) => profile.id !== profileId);
+      const leaderRows = mergeProfileOptions(
+        [],
+        ((teamLeaderData ?? []) as ProfileOption[]).filter((profile) => profile.id !== profileId)
+      );
+      const generalApproverRows = allProfileRows.filter(
+        (profile) => Number(profile.is_general_affairs_approver ?? 0) === 1
+      );
+
       setProjects((current) => mergeProjects(current, expenseProjectRows));
       setTeams((teamData ?? []) as TeamRow[]);
+      setProfileOptions(allProfileRows);
+      setDefaultStep1Approvers(leaderRows);
+      setGeneralAffairsApproverOptions(generalApproverRows);
       setExpenses(nextExpenses);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -317,6 +387,35 @@ export default function ExpensesClient() {
     return details.reduce((sum, detail) => sum + (toNumberOrNull(detail.amount) ?? 0), 0);
   }, [details]);
 
+  const selectedStep1Ids = useMemo(() => {
+    return new Set([...step1Approvers, ...shareApprovers].map((profile) => profile.id));
+  }, [shareApprovers, step1Approvers]);
+
+  const shareCandidateProfiles = useMemo(() => {
+    const keyword = shareSearchKeyword.trim().toLowerCase();
+    return profileOptions
+      .filter((profile) => !selectedStep1Ids.has(profile.id))
+      .filter((profile) => {
+        if (!keyword) return true;
+        const name = formatProfileName(profile).toLowerCase();
+        return name.includes(keyword) || (profile.email ?? "").toLowerCase().includes(keyword);
+      })
+      .slice(0, 10);
+  }, [profileOptions, selectedStep1Ids, shareSearchKeyword]);
+
+  const generalAffairsCandidateProfiles = useMemo(() => {
+    const selectedIds = new Set(generalAffairsApprovers.map((profile) => profile.id));
+    const keyword = generalAffairsSearchKeyword.trim().toLowerCase();
+    return generalAffairsApproverOptions
+      .filter((profile) => !selectedIds.has(profile.id))
+      .filter((profile) => {
+        if (!keyword) return true;
+        const name = formatProfileName(profile).toLowerCase();
+        return name.includes(keyword) || (profile.email ?? "").toLowerCase().includes(keyword);
+      })
+      .slice(0, 10);
+  }, [generalAffairsApproverOptions, generalAffairsApprovers, generalAffairsSearchKeyword]);
+
   const validate = () => {
     if (expenseType === "direct" && !selectedProjectId) {
       return "案件を選択してください。";
@@ -350,6 +449,15 @@ export default function ExpensesClient() {
     setSelectedTeamId("");
     setProjectSearchKeyword("");
     setDetails([createEmptyDetail()]);
+    setApprovalFlowModalOpen(false);
+    setStep1Approvers([]);
+    setShareApprovers([]);
+    setGeneralAffairsApprovers([]);
+    setShareSearchKeyword("");
+    setGeneralAffairsSearchKeyword("");
+    setShareSearchOpen(false);
+    setGeneralAffairsSearchOpen(false);
+    setShowGeneralAffairsStep(false);
   };
 
   const updateDetail = (detailId: string, patch: Partial<DetailFormRow>) => {
@@ -425,12 +533,71 @@ export default function ExpensesClient() {
     }
   };
 
-  const submit = async () => {
+  const openApprovalFlowModal = () => {
     setMessage("");
 
     const validationError = validate();
     if (validationError) {
       setMessage(validationError);
+      return;
+    }
+
+    setStep1Approvers(defaultStep1Approvers);
+    setShareApprovers([]);
+    setGeneralAffairsApprovers([]);
+    setShareSearchKeyword("");
+    setGeneralAffairsSearchKeyword("");
+    setShareSearchOpen(false);
+    setGeneralAffairsSearchOpen(false);
+    setShowGeneralAffairsStep(false);
+    setApprovalFlowModalOpen(true);
+  };
+
+  const removeStep1Approver = (profileId: string) => {
+    setStep1Approvers((current) => current.filter((profile) => profile.id !== profileId));
+  };
+
+  const addShareApprover = (profile: ProfileOption) => {
+    setShareApprovers((current) => mergeProfileOptions(current, [profile]));
+    setShareSearchKeyword("");
+    setShareSearchOpen(false);
+  };
+
+  const removeShareApprover = (profileId: string) => {
+    setShareApprovers((current) => current.filter((profile) => profile.id !== profileId));
+  };
+
+  const addGeneralAffairsApprover = (profile: ProfileOption) => {
+    setGeneralAffairsApprovers((current) => mergeProfileOptions(current, [profile]));
+    setGeneralAffairsSearchKeyword("");
+    setGeneralAffairsSearchOpen(false);
+  };
+
+  const removeGeneralAffairsApprover = (profileId: string) => {
+    setGeneralAffairsApprovers((current) => current.filter((profile) => profile.id !== profileId));
+  };
+
+  const submitExpenseRequest = async () => {
+    setMessage("");
+
+    const validationError = validate();
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+
+    const step1ApproverIds = uniqueIds([
+      ...step1Approvers.map((profile) => profile.id),
+      ...shareApprovers.map((profile) => profile.id),
+    ]);
+
+    if (step1ApproverIds.length === 0) {
+      setMessage("STEP 1 または共有先に承認者を1名以上選択してください。");
+      return;
+    }
+
+    if (showGeneralAffairsStep && generalAffairsApprovers.length === 0) {
+      setMessage("総務承認者を追加する場合は、総務承認者を1名以上選択してください。");
       return;
     }
 
@@ -442,8 +609,13 @@ export default function ExpensesClient() {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw new Error(authError.message);
 
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("ログインユーザーを取得できません。");
+      if (!authData.user?.id) throw new Error("ログインユーザーを取得できません。");
+
+      const { data: currentProfileId, error: currentProfileError } = await supabase.rpc("current_profile_id");
+      if (currentProfileError) throw new Error(currentProfileError.message);
+
+      const profileId = currentProfileId as string | null;
+      if (!profileId) throw new Error("ログイン中の社員情報を取得できません。");
 
       const requestGroupId = crypto.randomUUID();
 
@@ -459,7 +631,7 @@ export default function ExpensesClient() {
 
           if (detail.receiptFile) {
             const safeFileName = sanitizeFileName(detail.receiptFile.name);
-            const storagePath = `${userId}/${requestGroupId}/detail_${index + 1}_${Date.now()}_${safeFileName}`;
+            const storagePath = `${profileId}/${requestGroupId}/detail_${index + 1}_${Date.now()}_${safeFileName}`;
 
             const { error: uploadError } = await supabase.storage
               .from("expense-receipts")
@@ -488,9 +660,6 @@ export default function ExpensesClient() {
             expense_date: detail.expenseDate,
             invoice: !!detail.receiptFile,
             purpose: detail.purpose.trim(),
-            profile_id: userId,
-            updated_by: userId,
-            application_status: 0,
             request_group_id: requestGroupId,
             receipt_file_path: receiptFilePath,
             receipt_file_name: receiptFileName,
@@ -500,7 +669,13 @@ export default function ExpensesClient() {
         })
       );
 
-      const { error } = await supabase.from("project_actual_cost").insert(payloads);
+      const { error } = await supabase.rpc("create_expense_request_with_flow", {
+        expense_payloads: payloads,
+        step1_approver_ids: step1ApproverIds,
+        general_affairs_approver_ids: showGeneralAffairsStep
+          ? generalAffairsApprovers.map((profile) => profile.id)
+          : [],
+      });
 
       if (error) throw new Error(error.message);
 
@@ -777,11 +952,11 @@ export default function ExpensesClient() {
           <div className={styles.submitRow}>
             <button
               type="button"
-              onClick={submit}
+              onClick={openApprovalFlowModal}
               className={styles.submitButton}
               disabled={saving || loading}
             >
-              {saving ? "申請中..." : "申請する"}
+              次へ
             </button>
           </div>
         </>
@@ -848,6 +1023,249 @@ export default function ExpensesClient() {
             </div>
           )}
         </section>
+      )}
+
+      {approvalFlowModalOpen && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.approvalModal}>
+            <h2 className={styles.approvalModalTitle}>承認フローの確認</h2>
+
+            <div className={styles.approvalFlowSection}>
+              <div className={styles.approvalFlowHeading}>承認フロー（必須）</div>
+              <p className={styles.approvalFlowDescription}>この申請は以下の順で承認されます</p>
+
+              <div className={styles.flowCards}>
+                <div className={styles.flowCard}>
+                  <div className={styles.flowStepLabel}>STEP 1</div>
+                  <div className={styles.flowUserList}>
+                    {step1Approvers.length === 0 ? (
+                      <span className={styles.flowEmptyText}>上長未選択</span>
+                    ) : (
+                      step1Approvers.map((profile) => (
+                        <span key={profile.id} className={styles.flowUserChip}>
+                          {formatProfileName(profile)}（上長）
+                          <button
+                            type="button"
+                            className={styles.chipRemoveButton}
+                            onClick={() => removeStep1Approver(profile.id)}
+                            aria-label={`${formatProfileName(profile)}を削除`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {showGeneralAffairsStep && (
+                  <>
+                    <div className={styles.flowArrow}>→</div>
+                    <div className={styles.flowCard}>
+                      <div className={styles.flowStepLabel}>STEP 2</div>
+                      <div className={styles.flowUserList}>
+                        {generalAffairsApprovers.length === 0 ? (
+                          <span className={styles.flowEmptyText}>総務承認者未選択</span>
+                        ) : (
+                          generalAffairsApprovers.map((profile) => (
+                            <span key={profile.id} className={styles.flowUserChip}>
+                              {formatProfileName(profile)}
+                              <button
+                                type="button"
+                                className={styles.chipRemoveButton}
+                                onClick={() => removeGeneralAffairsApprover(profile.id)}
+                                aria-label={`${formatProfileName(profile)}を削除`}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {showGeneralAffairsStep ? (
+                <p className={styles.flowNote}>※ STEP 1の承認後に、選択した総務承認者へ通知されます</p>
+              ) : (
+                <p className={styles.flowNote}>※ 総務承認者を追加しない場合、STEP 1の承認で完了します</p>
+              )}
+            </div>
+
+            <div className={styles.approvalFlowSection}>
+              <div className={styles.approvalFlowHeading}>共有先（任意）</div>
+              <p className={styles.approvalFlowDescription}>
+                通常フローに加えてSTEP1にて申請内容の確認・承認を行うメンバーを追加できます
+              </p>
+
+              <div className={styles.memberSelectArea}>
+                <div className={styles.selectedChipList}>
+                  {shareApprovers.map((profile) => (
+                    <span key={profile.id} className={styles.memberChip}>
+                      {formatProfileName(profile)}
+                      <button
+                        type="button"
+                        className={styles.chipRemoveButton}
+                        onClick={() => removeShareApprover(profile.id)}
+                        aria-label={`${formatProfileName(profile)}を削除`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+
+                  <div className={styles.memberSearchWrapper}>
+                    <button
+                      type="button"
+                      className={styles.addMemberButton}
+                      onClick={() => setShareSearchOpen((current) => !current)}
+                    >
+                      ＋ メンバーを追加
+                    </button>
+
+                    {shareSearchOpen && (
+                      <div className={styles.memberSearchDropdown}>
+                        <input
+                          value={shareSearchKeyword}
+                          onChange={(event) => setShareSearchKeyword(event.target.value)}
+                          className={styles.memberSearchInput}
+                          placeholder="名前で検索"
+                          autoFocus
+                        />
+                        <div className={styles.memberSearchList}>
+                          {shareCandidateProfiles.length === 0 ? (
+                            <div className={styles.memberSearchEmpty}>候補がありません。</div>
+                          ) : (
+                            shareCandidateProfiles.map((profile) => (
+                              <button
+                                key={profile.id}
+                                type="button"
+                                className={styles.memberSearchOption}
+                                onClick={() => addShareApprover(profile)}
+                              >
+                                {formatProfileName(profile)}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.approvalFlowSection}>
+              <div className={styles.approvalFlowHeading}>総務承認者（任意）</div>
+              <p className={styles.approvalFlowDescription}>
+                総務承認が必要な経費の場合のみ追加してください。追加しない場合はSTEP 2なしで申請されます。
+              </p>
+
+              {!showGeneralAffairsStep ? (
+                <button
+                  type="button"
+                  className={styles.addGeneralAffairsButton}
+                  onClick={() => {
+                    setShowGeneralAffairsStep(true);
+                    setGeneralAffairsSearchOpen(true);
+                  }}
+                >
+                  ＋ 総務承認者を追加する
+                </button>
+              ) : (
+                <div className={styles.memberSelectArea}>
+                  <div className={styles.selectedChipList}>
+                    {generalAffairsApprovers.map((profile) => (
+                      <span key={profile.id} className={styles.memberChip}>
+                        {formatProfileName(profile)}
+                        <button
+                          type="button"
+                          className={styles.chipRemoveButton}
+                          onClick={() => removeGeneralAffairsApprover(profile.id)}
+                          aria-label={`${formatProfileName(profile)}を削除`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+
+                    <div className={styles.memberSearchWrapper}>
+                      <button
+                        type="button"
+                        className={styles.addMemberButton}
+                        onClick={() => setGeneralAffairsSearchOpen((current) => !current)}
+                      >
+                        ＋ 総務承認者を追加
+                      </button>
+
+                      {generalAffairsSearchOpen && (
+                        <div className={styles.memberSearchDropdown}>
+                          <input
+                            value={generalAffairsSearchKeyword}
+                            onChange={(event) => setGeneralAffairsSearchKeyword(event.target.value)}
+                            className={styles.memberSearchInput}
+                            placeholder="名前で検索"
+                            autoFocus
+                          />
+                          <div className={styles.memberSearchList}>
+                            {generalAffairsCandidateProfiles.length === 0 ? (
+                              <div className={styles.memberSearchEmpty}>候補がありません。</div>
+                            ) : (
+                              generalAffairsCandidateProfiles.map((profile) => (
+                                <button
+                                  key={profile.id}
+                                  type="button"
+                                  className={styles.memberSearchOption}
+                                  onClick={() => addGeneralAffairsApprover(profile)}
+                                >
+                                  {formatProfileName(profile)}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      className={styles.removeGeneralAffairsStepButton}
+                      onClick={() => {
+                        setShowGeneralAffairsStep(false);
+                        setGeneralAffairsApprovers([]);
+                        setGeneralAffairsSearchKeyword("");
+                        setGeneralAffairsSearchOpen(false);
+                      }}
+                    >
+                      総務承認を追加しない
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className={styles.approvalModalActions}>
+              <button
+                type="button"
+                className={styles.approvalCancelButton}
+                onClick={() => setApprovalFlowModalOpen(false)}
+                disabled={saving}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.approvalSubmitButton}
+                onClick={submitExpenseRequest}
+                disabled={saving}
+              >
+                {saving ? "申請中..." : "申請する"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

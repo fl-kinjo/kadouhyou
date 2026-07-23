@@ -1,0 +1,318 @@
+.page {
+  padding: 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+  color: #111;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 28px;
+}
+
+.pageDescription {
+  margin: 8px 0 0;
+  color: #555;
+}
+
+.backLink {
+  color: #111;
+  text-decoration: underline;
+}
+
+.controlPanel {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fafafa;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.controlField {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.wideControlField {
+  min-width: min(460px, 100%);
+}
+
+.controlField label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.controlField select,
+.controlField input {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.reloadButton,
+.printButton {
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 8px 20px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.reloadButton {
+  border: 1px solid #aaa;
+  background: #fff;
+}
+
+.printButton {
+  border: 0;
+  background: #b00;
+  color: #fff;
+}
+
+.reloadButton:disabled,
+.printButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.printHelp,
+.warningText,
+.errorText {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.printHelp { color: #555; }
+.warningText { color: #a16207; font-weight: 700; }
+.errorText { color: #b00; font-weight: 700; }
+
+.loading,
+.emptyState {
+  margin-top: 24px;
+  padding: 28px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  text-align: center;
+  background: #fff;
+}
+
+.reportSheet {
+  margin-top: 24px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.monthlySheet {
+  page: monthly-report;
+}
+
+.monthlyTitleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.monthlyTitleRow h2,
+.monthlyTitleRow p {
+  margin: 0;
+}
+
+.reportNote {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #555;
+}
+
+.monthlyTableScroll {
+  overflow-x: auto;
+}
+
+.monthlyTable {
+  width: 100%;
+  min-width: 1700px;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 11px;
+}
+
+.monthlyTable th,
+.monthlyTable td {
+  border: 1px solid #cfcfcf;
+  padding: 6px 5px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.monthlyTable thead th {
+  background: #e9e9e9;
+  text-align: center;
+  font-weight: 900;
+}
+
+.monthlyTable tbody th {
+  text-align: left;
+  background: #f8f8f8;
+  font-weight: 800;
+}
+
+.monthlyTable tbody td:nth-child(8),
+.monthlyTable tbody td:nth-child(15) {
+  background: #eef8e8;
+}
+
+.monthlyTable tbody td:nth-child(16),
+.monthlyTable tbody td:nth-child(17),
+.monthlyTable tbody td:nth-child(18) {
+  color: #b00;
+}
+
+.monthlyTable tbody td:nth-last-child(-n+2) {
+  color: #075985;
+}
+
+.expenseSheet {
+  page: expense-report;
+  max-width: 1000px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 8px;
+}
+
+.expenseTitle {
+  margin: 0 0 56px;
+  text-align: center;
+  font-size: 34px;
+  font-weight: 500;
+}
+
+.expenseMetaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.expenseMetaRow p {
+  margin: 0;
+}
+
+.applicantTable,
+.expenseTable {
+  border-collapse: collapse;
+}
+
+.applicantTable th,
+.applicantTable td {
+  border: 1px solid #cfcfcf;
+  padding: 11px 20px;
+}
+
+.applicantTable th {
+  font-weight: 900;
+}
+
+.expenseTable {
+  width: 100%;
+  font-size: 16px;
+}
+
+.expenseTable th,
+.expenseTable td {
+  border: 1px solid #cfcfcf;
+  padding: 11px 10px;
+}
+
+.expenseTable th {
+  text-align: center;
+  font-weight: 900;
+}
+
+.expenseTable th:first-child,
+.expenseTable td:first-child {
+  width: 160px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.expenseTable th:nth-child(3),
+.expenseTable td:nth-child(3) {
+  width: 100px;
+}
+
+.expenseTable th:last-child,
+.expenseTable td:last-child {
+  width: 120px;
+}
+
+.centerCell { text-align: center; }
+.amountCell { text-align: right; white-space: nowrap; }
+.totalRow td { font-weight: 900; }
+.totalRow td:first-child { text-align: right; }
+
+@page monthly-report {
+  size: A3 landscape;
+  margin: 8mm;
+}
+
+@page expense-report {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media (max-width: 720px) {
+  .page { padding: 16px; }
+  .controlPanel { align-items: stretch; }
+  .controlField,
+  .wideControlField,
+  .controlField select,
+  .controlField input,
+  .reloadButton,
+  .printButton { width: 100%; min-width: 0; }
+  .expenseMetaRow { align-items: flex-start; flex-direction: column; }
+}
+
+@media print {
+  .noPrint { display: none !important; }
+  .page {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+  .reportSheet { margin: 0; }
+  .monthlyTableScroll { overflow: visible; }
+  .monthlyTable {
+    min-width: 0;
+    width: 100%;
+    font-size: 7px;
+  }
+  .monthlyTable th,
+  .monthlyTable td {
+    padding: 3px 2px;
+  }
+  .expenseSheet {
+    max-width: none;
+    padding: 0;
+  }
+  .loading,
+  .emptyState { display: none; }
+}
