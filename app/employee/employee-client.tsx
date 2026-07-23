@@ -1470,7 +1470,6 @@ export default function EmployeeClient() {
                   <div className={styles.protectedSection}>
                     <div className={styles.protectedSectionHeader}>
                       <strong>勤務・有給情報</strong>
-                      <span className={styles.permissionBadge}>管理者・総務チームのみ表示・編集可</span>
                     </div>
 
                     <div className={styles.formRow}>
